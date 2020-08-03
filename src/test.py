@@ -3,7 +3,7 @@ import numpy as np
 import torch
 from gpytorch.means import ZeroMean
 from gpytorch.kernels import RBFKernel, PeriodicKernel
-from src.structural_sgp import VariationalGP, StructuralSparseGP
+from src.structural_sgp import VariationalGP, StructuralSparseGP, TrivialSelector, SpikeAndSlabSelector
 from src.mean_field_hs import MeanFieldHorseshoe, VariatioalHorseshoe
 from gpytorch.likelihoods import GaussianLikelihood
 from gpytorch.mlls import VariationalELBO
@@ -27,43 +27,44 @@ for mean, kernel in zip(means, kernels):
     gp = VariationalGP(mean, kernel, inducing_points)
     gps.append(gp)
 
-# declare Horseshoe object
-# horseshoe = MeanFieldHorseshoe(n_dims=n_kernels, A=1.)
-horseshoe = VariatioalHorseshoe(A=1., B=1., n_inducings=[n_inducing]*n_kernels)
+def test_trivial_model():
+    selector = TrivialSelector(n_kernels)
+    # main model
+    model = StructuralSparseGP(gps, selector)
 
-# main model
-model = StructuralSparseGP(gps, horseshoe)
+    likelihood = GaussianLikelihood()
+    elbo = VariationalELBO(likelihood, model, num_data=100)
 
-likelihood = GaussianLikelihood()
-elbo = VariationalELBO(likelihood, model, num_data=100)
-
-
-output = model(train_x)
-kl = model.variational_strategy.kl_divergence()
-
-optimizer = torch.optim.Adam(model.parameters(), lr=0.01)
-
-
-for i in range(500):
-    optimizer.zero_grad()
     output = model(train_x)
-    loss = - elbo(output, train_y)
-    loss.backward()
-    optimizer.step()
-    print("Iter: {} \t Loss: {:.2f}".format(i, loss.item()))
-    if i%10 == 0:
-        print(model.horseshoe())
-    model.horseshoe.update_ab()
+    optimizer = torch.optim.Adam(list(model.parameters()) + list(likelihood.parameters()), lr=0.01)
 
-print(model.horseshoe())
-print(torch.mean(output.mean - train_y)**2)
-print(train_y)
-print(output.mean)
 
-plt.plot(train_x, train_y, '+')
-plt.plot(train_x, output.mean.detach().numpy())
-lower, upper = output.confidence_region()
-plt.fill_between(train_x.numpy(), lower.detach().numpy(), upper.detach().numpy(), alpha=0.3)
-print(lower)
-print(upper)
-plt.show()
+    for i in range(500):
+        optimizer.zero_grad()
+        output = model(train_x)
+        loss = - elbo(output, train_y)
+        loss.backward()
+        optimizer.step()
+        print("Iter: {} \t Loss: {:.2f}".format(i, loss.item()))
+
+    print(torch.mean(output.mean - train_y)**2)
+    print(train_y)
+    print(output.mean)
+    plt.plot(train_x, train_y, '+')
+    plt.plot(train_x, output.mean.detach().numpy())
+    lower, upper = output.confidence_region()
+    plt.fill_between(train_x.numpy(), lower.detach().numpy(), upper.detach().numpy(), alpha=0.3)
+    print(lower)
+    print(upper)
+    plt.show()
+
+def test_object_spike_and_slab():
+
+    ss = SpikeAndSlabSelector(5)
+    sample = ss()
+    print(sample)
+    print(ss.kl_divergence())
+
+
+# test_trivial_model()
+test_object_spike_and_slab()

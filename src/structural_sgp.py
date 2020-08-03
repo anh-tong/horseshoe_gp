@@ -1,30 +1,15 @@
 import torch
 from torch.nn import ModuleList
+from gpytorch.module import Module
 
 import gpytorch
+from gpytorch.constraints import Interval
 from gpytorch.models import ApproximateGP
 from gpytorch.distributions import MultivariateNormal
 from gpytorch.variational import CholeskyVariationalDistribution, VariationalStrategy
 from gpytorch.lazy import SumLazyTensor
-from src.utils import trace_stats, expect_kl
-
-from src.mean_field_hs import MeanFieldHorseshoe
-
 from typing import List
 
-def get_stats(variational_strategy:VariationalStrategy):
-    """Get the statistics trace of (S + m^\top m) k_i(\vZ, \vZ) from variational strategy"""
-
-    # q(u)
-    variation_dist = variational_strategy.variational_distribution
-    m = variation_dist.mean
-    S = variation_dist.covariance_matrix
-    S_m = S + m.t() @ m
-    q_S_m = MultivariateNormal(torch.zeros_like(m), S_m)
-    # p(u)
-    prior = variational_strategy(variational_strategy.inducing_points, prior=True)
-
-    return trace_stats(q_S_m, prior)
 
 class VariationalGP(ApproximateGP):
 
@@ -40,37 +25,82 @@ class VariationalGP(ApproximateGP):
         covar_x = self.covar_model(x)
         return MultivariateNormal(mean_x, covar_x)
 
-class StructuralVariationalStrategy(object):
 
-    def __init__(self, gps, horseshoe:MeanFieldHorseshoe):
-        self.gps = gps
-        self.horseshoe = horseshoe
+class BaseSparseSelector(Module):
+
+    def __init__(self, dim):
+        super().__init__()
+        self.dim = dim
 
     def kl_divergence(self):
-        expect_invese = self.horseshoe().squeeze()
-        kls = []
-        for i, gp in enumerate(self.gps):
-            variational_strategy = gp.variational_strategy
-            variation_dist = variational_strategy.variational_distribution
-            prior = variational_strategy.prior_distribution
-            new_prior = MultivariateNormal(prior.mean, prior.covariance_matrix * expect_invese[i])
-            kl = torch.distributions.kl.kl_divergence(variation_dist, new_prior)
-            # kl = variational_strategy.kl_divergence()
-            kls.append(kl)
+        raise NotImplementedError
 
-        gp_kl = sum(kls)
-        horseshoe_kl = self.horseshoe.kl_divergence() #.detach() # make sure there is no gradient calculation
-        return gp_kl + horseshoe_kl
+    def __call__(self):
+        raise NotImplementedError
+
+
+class TrivialSelector(BaseSparseSelector):
+
+    def __init__(self, dim):
+        super(TrivialSelector, self).__init__(dim)
+
+    def kl_divergence(self):
+        return torch.tensor([0.])
+
+    def __call__(self):
+        return torch.ones(self.dim)
+
+
+class SpikeAndSlabSelector(BaseSparseSelector):
+
+    def __init__(self, dim, gumbel_temp=1.):
+        super(SpikeAndSlabSelector, self).__init__(dim)
+        self.gumbel_temp = gumbel_temp
+        self.register_parameter(name="raw_prob",
+                                parameter=torch.nn.Parameter(torch.zeros(self.dim, 1)))
+        prob_constraint = Interval(0., 1.)
+        self.register_constraint("raw_prob", prob_constraint)
+        self.register_parameter(name='w_mean',
+                                parameter=torch.nn.Parameter(torch.zeros(self.dim, 1)))
+        self.register_parameter(name="log_w_var",
+                                parameter=torch.nn.Parameter(torch.zeros(self.dim, 1)))
+        self.register_parameter(name="log_w_zero",
+                                parameter=torch.nn.Parameter(torch.zeros(self.dim, 1)))
+
+    @property
+    def prob(self):
+        return self.raw_prob_constraint.transform(self.raw_prob)
+
+    def kl_divergence(self):
+        log_prior = torch.sum(self.prob * tor)
+        entropy = 0.
+        return entropy + log_prior
+
+    def gumbel_sample(self):
+        bar_prob = 1. - self.prob
+        stacked = torch.cat([bar_prob, self.prob], dim=1)
+        uniform = torch.rand(self.dim, 2)
+        z = - torch.log(-torch.log(uniform)) + torch.log(stacked)
+        applied_softmax = torch.softmax(z, dim=1) / self.gumbel_temp
+        return applied_softmax[:,1]
+
+    def __call__(self):
+
+        g = self.gumbel_sample()[:,None]
+        mean = g * self.w_mean
+        var = g * torch.exp(self.log_w_var) + (1. - g) * torch.exp(self.log_w_zero)
+        return mean + var * torch.randn(self.dim, 1)
+
 
 class StructuralSparseGP(ApproximateGP):
 
-    def __init__(self, gps: List[ApproximateGP], horseshoe:MeanFieldHorseshoe):
+    def __init__(self, gps: List[ApproximateGP], selector: BaseSparseSelector):
         super().__init__(None)
         # sanity check #kernels = #dimension
-        assert len(gps) == horseshoe.n_dims
-        self.horseshoe = horseshoe
+        assert len(gps) == selector.dim
+        self.selector = selector
         self.gps = ModuleList(gps)
-        self.variational_strategy = StructuralVariationalStrategy(gps, horseshoe)
+        self.variational_strategy = StructuralVariationalStrategy(self)
 
     def forward(self, x):
         pass
@@ -81,15 +111,32 @@ class StructuralSparseGP(ApproximateGP):
             posterior = gp(inputs, prior, **kwargs)
             posteriors += [posterior]
 
-        weights = self.horseshoe().squeeze()
+        weights = self.selector().squeeze()
         means, covars = [], []
-        for i in range(self.horseshoe.n_dims):
+        for i in range(self.selector.dim):
             w_i = weights[i].squeeze()
-            mean_i = posteriors[i].mean
-            covar_i = posteriors[i].covariance_matrix * w_i
+            mean_i = posteriors[i].mean * w_i
+            covar_i = posteriors[i].covariance_matrix * w_i ** 2
             means.append(mean_i)
             covars.append(covar_i)
 
         mean = sum(means)
         covar = SumLazyTensor(*covars)
         return MultivariateNormal(mean, covar)
+
+
+class StructuralVariationalStrategy(object):
+
+    def __init__(self, model: StructuralSparseGP):
+        self.model = model
+
+    def kl_divergence(self):
+        kls = []
+        for i, gp in enumerate(self.model.gps):
+            variational_strategy = gp.variational_strategy
+            kl = variational_strategy.kl_divergence()
+            kls.append(kl)
+
+        gp_kl = sum(kls)
+        horseshoe_kl = self.model.selector.kl_divergence()
+        return gp_kl + horseshoe_kl
