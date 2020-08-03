@@ -3,6 +3,7 @@ import math
 from torch.nn import Module
 from torch.distributions import HalfCauchy, Normal
 
+
 class ReparameterizedGaussian():
 
     def __init__(self, mean, var):
@@ -34,6 +35,7 @@ class ReparameterizedGaussian():
 
         return part1 + part2
 
+
 class InverseGamma(object):
 
     def __init__(self, shape, rate):
@@ -45,7 +47,6 @@ class InverseGamma(object):
         """
         return self.shape / self.rate
 
-
     def expect_log(self):
         """Compute \mathbb{E}[\log(x)]"""
         return torch.log(self.rate) - torch.digamma(self.shape)
@@ -55,13 +56,12 @@ class InverseGamma(object):
                   - (1 + self.shape) * torch.digamma(self.shape)
         return torch.sum(entropy)
 
-
     def update(self, new_shape, new_rate):
         self.shape = new_shape
         self.rate = new_rate
 
 
-def expectation_log_IG(alpha, expect_beta, expect_log_beta, expect_log_x , expect_inverse_x):
+def expectation_log_IG(alpha, expect_beta, expect_log_beta, expect_log_x, expect_inverse_x):
     """
     Inverse Gamma with pdf: \IG(x;\alpha, \beta) = \frac{\beta^\alpha}{\Gamma(\alpha)} (1/x)^{\alpha +1} \exp(-\beta / x)
 
@@ -76,12 +76,12 @@ def expectation_log_IG(alpha, expect_beta, expect_log_beta, expect_log_x , expec
     """
     term1 = - torch.lgamma(alpha)
     term2 = alpha * expect_log_beta
-    term3 =  - (alpha + 1) * expect_log_x
+    term3 = - (alpha + 1) * expect_log_x
     term4 = -expect_beta * expect_inverse_x
     return term1 + term2 + term3 + term4
 
-class VariationalHalfCauchy(Module):
 
+class VariationalHalfCauchy(Module):
     """Variational Half Cauchy with reprarameterization using Inverse Gamma
 
     p(\lambda_i^2) = Half-Cauchy(0, b), i = 1,...,n
@@ -102,7 +102,7 @@ class VariationalHalfCauchy(Module):
         # prior and variatoinal over kappa
         # note that there is no variational distribution
         self.kappa_shape = torch.Tensor([0.5] * self.n_dim)
-        self.kappa_rate = torch.Tensor([1. / self.b **2] * n_dim)
+        self.kappa_rate = torch.Tensor([1. / self.b ** 2] * n_dim)
         self.kappa = InverseGamma(self.kappa_shape, self.kappa_rate)
 
         # variational over lambda
@@ -113,9 +113,8 @@ class VariationalHalfCauchy(Module):
         self.log_lambda = ReparameterizedGaussian(self.lambda_mean, self.lambda_var)
 
     def expect_log_prior(self):
-
         # \mathbb{E}_{\lambda_i, \kappa_i}[IG(\lambda_i^2| 1/2, 1/kappa_i)]
-        alpha = self.kappa_shape # 1/2
+        alpha = self.kappa_shape  # 1/2
         expect_beta = self.kappa.expect_inverse()
         expect_log_beta = self.kappa.expect_log()
         expect_log_x = 0
@@ -153,15 +152,15 @@ class VariationalHalfCauchy(Module):
         new_rate = torch.exp(-self.log_lambda.mean + 0.5 * self.log_lambda.std_dev ** 2) + self.kappa_rate
         self.kappa.update(new_shape, new_rate)
 
-    def forward(self) :
+    def forward(self):
         """Return a sample of log-normal from variational dist of lambda^2"""
-        log_lambda_sample = self.log_lambda.sample() # A sample from normal dist
-        return log_lambda_sample.exp() # A sample from log-normal dist
+        log_lambda_sample = self.log_lambda.sample()  # A sample from normal dist
+        return log_lambda_sample.exp()  # A sample from log-normal dist
+
 
 class VariationalHorseshoe(Module):
 
     def __init__(self, n_dim, b_0, b_g):
-
         super().__init__()
         self.n_dim = n_dim
         self.b_0 = b_0
@@ -178,13 +177,12 @@ class VariationalHorseshoe(Module):
         # a Gaussian sample \mathcal(N)(0, \lambda_i^2\tau^2)
         var = var_local * var_global
 
-
         # # regularized horseshoe
         c2 = 40
         lambda_tilde = torch.sqrt(c2 * var_local / (c2 + var))
 
         # return Normal(0,1).sample(sample_shape=var.size()) * var_global.sqrt() * lambda_tilde
-        return Normal(0,1).sample(sample_shape=var.size()) * var.sqrt()
+        return Normal(0, 1).sample(sample_shape=var.size()) * var.sqrt()
 
     def expect_log_prior(self):
         return self.local_shrinkage.expect_log_prior() + self.global_shrinkage.expect_log_prior()

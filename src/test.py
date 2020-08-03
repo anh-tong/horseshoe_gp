@@ -9,10 +9,6 @@ from gpytorch.likelihoods import GaussianLikelihood
 from gpytorch.mlls import VariationalELBO
 import matplotlib.pyplot as plt
 
-# fix plot Mac OS
-import os
-os.environ['KMP_DUPLICATE_LIB_OK']='True'
-
 # toy data
 train_x = torch.linspace(0, 1, 100)
 train_y = 3.*torch.cos(train_x * 2 * math.pi) + torch.randn(100).mul(train_x.pow(3) * 1.)

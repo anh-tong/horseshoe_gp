@@ -28,6 +28,9 @@ class InverseGamma(object):
                   - (1 + self.shape) * torch.digamma(self.shape)
         return torch.sum(entropy)
 
+    def kl_divergence(self):
+        return self.entropy() - self.expect_log()
+
 
     def update(self, new_shape, new_rate):
         self.shape = new_shape
@@ -102,7 +105,7 @@ class MeanFieldHorseshoe(object):
 
     def kl_divergence(self):
         # TODO: implement this. do not affect gradient computation
-        return torch.zeros(1)
+        return self.tau2.kl_divergence() + self.lambda2.kl_divergence()
 
 class InverseGammaReparam(Module):
 

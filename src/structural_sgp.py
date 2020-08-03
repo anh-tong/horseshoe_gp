@@ -93,8 +93,3 @@ class StructuralSparseGP(ApproximateGP):
         mean = sum(means)
         covar = SumLazyTensor(*covars)
         return MultivariateNormal(mean, covar)
-
-
-
-
-
