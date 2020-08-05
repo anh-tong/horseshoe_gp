@@ -3,15 +3,16 @@ import numpy as np
 import torch
 from gpytorch.means import ZeroMean
 from gpytorch.kernels import RBFKernel, PeriodicKernel
-from src.structural_sgp import VariationalGP, StructuralSparseGP, TrivialSelector, SpikeAndSlabSelector, SpikeAndSlabSelectorV2
+from src.structural_sgp import VariationalGP, StructuralSparseGP, TrivialSelector, SpikeAndSlabSelector, \
+    SpikeAndSlabSelectorV2
 from src.mean_field_hs import MeanFieldHorseshoe, VariatioalHorseshoe
 from gpytorch.likelihoods import GaussianLikelihood
-from gpytorch.mlls import VariationalELBO
+from gpytorch.mlls import VariationalELBO, PredictiveLogLikelihood
 import matplotlib.pyplot as plt
 
 # toy data
 train_x = torch.linspace(0, 1, 100)
-train_y = 3.*torch.cos(train_x * 2 * math.pi) + torch.randn(100).mul(train_x.pow(3) * 1.)
+train_y = 3. * torch.cos(train_x * 2 * math.pi) + torch.randn(100).mul(train_x.pow(3) * 1.)
 
 # set up kernels
 n_kernels = 5
@@ -26,6 +27,7 @@ gps = []
 for mean, kernel in zip(means, kernels):
     gp = VariationalGP(mean, kernel, inducing_points)
     gps.append(gp)
+
 
 def test_trivial_model():
     selector = TrivialSelector(n_kernels)
@@ -47,7 +49,7 @@ def test_trivial_model():
         optimizer.step()
         print("Iter: {} \t Loss: {:.2f}".format(i, loss.item()))
 
-    print(torch.mean(output.mean - train_y)**2)
+    print(torch.mean(output.mean - train_y) ** 2)
     print(train_y)
     print(output.mean)
     plt.plot(train_x, train_y, '+')
@@ -58,27 +60,30 @@ def test_trivial_model():
     print(upper)
     plt.show()
 
-def test_object_spike_and_slab():
 
+def test_object_spike_and_slab():
     ss = SpikeAndSlabSelector(5)
     sample = ss()
     print(sample)
-    print(ss.kl_divergence())  ## KL divergence equal to 0 makes sense because the variational dist. and prior dist. is the same
+    print(
+        ss.kl_divergence())  ## KL divergence equal to 0 makes sense because the variational dist. and prior dist. is the same
+
 
 def test_object_spike_and_slab_v2():
     ss = SpikeAndSlabSelectorV2(5)
     sample = ss()
     print(sample)
+    print(ss.gumbel_sample())
     print(ss.kl_divergence())
 
 
 def test_linear_regression_spike_and_slab():
-
     ### CREATE DATA
+    np.random.seed(123)
     N = 100
     sparsity = 0.05
     M = 200
-    beta = np.zeros(M+1)
+    beta = np.zeros(M + 1)
     b1 = np.random.binomial(n=1, p=sparsity, size=M)
     b2 = np.random.binomial(n=1, p=0.5, size=M)
     for m in range(M):
@@ -91,85 +96,48 @@ def test_linear_regression_spike_and_slab():
             beta[m] = 0.25 * np.random.randn()
 
     beta[M] = 0.
-    X_train = np.random.randn(N, M+1)
-    X_train[:,M] = 1
+    X_train = np.random.randn(N, M + 1)
+    X_train[:, M] = 1
     y_train = np.matmul(X_train, beta) + np.random.randn(N)
     X_train, y_train = torch.tensor(X_train, dtype=torch.float32), torch.tensor(y_train, dtype=torch.float32)
-    spike_and_slab = SpikeAndSlabSelector(dim=M+1)
-
-    def compute_loss():
-        s2 = torch.tensor(1e-2)
-        w = spike_and_slab()
-        def log_likelihood(w):
-            y_mean = X_train @ w
-            ll = - 0.5 * N * torch.log(2. * np.pi * s2) - 0.5 * torch.square(y_train - y_mean).sum() / s2
-            return ll
-
-        elbo = log_likelihood(w) - spike_and_slab.kl_divergence()
-        return -elbo
-
-    optimizer = torch.optim.Adam(spike_and_slab.parameters(), lr=0.1)
-
-    for i in range(500):
-        optimizer.zero_grad()
-        loss = compute_loss()
-        loss.backward()
-        optimizer.step()
-        print("Iter: {} \t Loss: {}".format(i, loss.item()))
-
-def test_linear_regression_spike_and_slab_v2():
-
-    ### CREATE DATA
-    N = 100
-    sparsity = 0.05
-    M = 200
-    beta = np.zeros(M+1)
-    b1 = np.random.binomial(n=1, p=sparsity, size=M)
-    b2 = np.random.binomial(n=1, p=0.5, size=M)
-    for m in range(M):
-        if b1[m]:
-            if b2[m]:
-                beta[m] = 10 + np.random.randn()
-            else:
-                beta[m] = -10 + np.random.randn()
-        else:
-            beta[m] = 0.25 * np.random.randn()
-
-    beta[M] = 0.
-    X_train = np.random.randn(N, M+1)
-    X_train[:,M] = 1
-    y_train = np.matmul(X_train, beta) + np.random.randn(N)
-    X_train, y_train = torch.tensor(X_train, dtype=torch.float32), torch.tensor(y_train, dtype=torch.float32)
-    spike_and_slab = SpikeAndSlabSelectorV2(dim=M+1)
+    spike_and_slab = SpikeAndSlabSelector(dim=M + 1)
 
     def compute_loss():
         s2 = spike_and_slab.s2
         w = spike_and_slab()
+
         def log_likelihood(w):
-            y_mean = X_train @ w
-            ll = - 0.5 * N * torch.log(2. * np.pi * s2) - 0.5 * torch.square(y_train - y_mean).sum() / s2
+            y_mean = torch.matmul(X_train, w)
+            ll = - 0.5 * N * torch.log(2. * np.pi * s2) - 0.5 * torch.square(y_train - y_mean.squeeze()).sum() / s2
             return ll
 
-        elbo = log_likelihood(w) - spike_and_slab.kl_divergence()
-        return -elbo
+        ll = log_likelihood(w)
+        kl = spike_and_slab.kl_divergence()
+        # elbo = log_likelihood(w) - spike_and_slab.kl_divergence()
+        return ll, kl
 
-    optimizer = torch.optim.Adam(spike_and_slab.parameters(), lr=0.1)
+    optimizer = torch.optim.Adam(spike_and_slab.parameters(), lr=0.005)
 
-    for i in range(1000):
+    for i in range(10000):
         optimizer.zero_grad()
-        loss = compute_loss()
+        ll, kl = compute_loss()
+        loss = - (ll - kl)
         loss.backward()
         optimizer.step()
-        print("Iter: {} \t Loss: {}".format(i, loss.item()))
+        print("Iter: {} \t Loss: {} \t ll: {} \t kl: {} \t noise: {}".format(i,
+                                                                             loss.item(),
+                                                                             ll.item(),
+                                                                             kl.item(),
+                                                                             spike_and_slab.s2.data))
 
-    fig = plt.figure(figsize=(16,8))
+    fig = plt.figure(figsize=(16, 8))
 
     ax = fig.add_subplot(1, 1, 1)
     ax.plot(np.arange(M), beta[:-1], \
             linewidth=3, color="black", label="ground truth")
     ax.scatter(np.arange(M), beta[:-1], \
                s=70, marker='+', color="black")
-    w =spike_and_slab.w_mu * spike_and_slab.s_pi
+    w = spike_and_slab.w_mean * spike_and_slab.prob
     w = w.detach().numpy()
     ax.plot(np.arange(M), w[:-1], \
             linewidth=3, color="red", \
@@ -188,7 +156,39 @@ def test_linear_regression_spike_and_slab_v2():
     plt.show()
 
 
+def test_gp_spike_and_slab():
+
+    selector = SpikeAndSlabSelector(dim=n_kernels, gumbel_temp=.5)
+    model = StructuralSparseGP(gps, selector)
+
+    likelihood = GaussianLikelihood()
+    elbo = PredictiveLogLikelihood(likelihood, model, num_data=100)
+
+    output = model(train_x)
+    optimizer = torch.optim.Adam(list(model.parameters()) + list(likelihood.parameters()), lr=0.01)
+
+    for i in range(5000):
+        optimizer.zero_grad()
+        output = model(train_x)
+        loss = - elbo(output, train_y)
+        loss.backward()
+        optimizer.step()
+        print("Iter: {} \t Loss: {:.2f}".format(i, loss.item()))
+
+    print(torch.mean(output.mean - train_y) ** 2)
+    print(train_y)
+    print(output.mean)
+    plt.plot(train_x, train_y, '+')
+    plt.plot(train_x, output.mean.detach().numpy())
+    lower, upper = output.confidence_region()
+    plt.fill_between(train_x.numpy(), lower.detach().numpy(), upper.detach().numpy(), alpha=0.3)
+    plt.show()
+
+
 # test_trivial_model()
 # test_object_spike_and_slab()
 # test_object_spike_and_slab_v2()
-test_linear_regression_spike_and_slab_v2()
+# test_linear_regression_spike_and_slab_v2()
+# test_linear_regression_spike_and_slab()
+
+test_gp_spike_and_slab()
