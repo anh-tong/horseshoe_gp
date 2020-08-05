@@ -105,7 +105,7 @@ class SpikeAndSlabSelector(BaseSparseSelector):
 
     def log_prior(self, eps=1e-20):
         log_prior_gaussian = -0.5 * (np.log(2. * np.pi) + self.raw_scale) - 0.5 * (
-                    torch.square(self.w_mean) + torch.exp(self.log_w_var)) / self.scale_prior
+                torch.square(self.w_mean) + torch.exp(self.log_w_var)) / self.scale_prior
         log_prior_gaussian = self.prob * log_prior_gaussian
         log_prior_bern = (self.prob * torch.log(self.sparsity_prior + eps)) + \
                          ((1. - self.prob) * torch.log(1. - self.sparsity_prior + eps))
@@ -199,6 +199,99 @@ class SpikeAndSlabSelectorV2(BaseSparseSelector):
                     torch.sum(g * torch.log(self.pi_w + esp) + (1. - g) * torch.log(1. - self.pi_w + esp))
 
         return - log_prior - entropy
+
+class InverseGamma(object):
+
+    def __init__(self, shape, rate):
+        self.shape = shape
+        self.rate = rate
+
+    def expect_inverse(self):
+        """Compute \mathbb{E}[1/x] of IG(x; shape, rate)
+        """
+        return self.shape / self.rate
+
+    def expect(self):
+        return self.rate / (self.shape -1.)
+
+
+    def expect_log(self):
+        """Compute \mathbb{E}[\log(x)]"""
+        return torch.log(self.rate) - torch.digamma(self.shape)
+
+    def entropy(self):
+        entropy = self.shape + torch.log(self.rate) + torch.lgamma(self.shape) \
+                  - (1 + self.shape) * torch.digamma(self.shape)
+        return torch.sum(entropy)
+
+    def kl_divergence(self):
+        return self.entropy() - self.expect_log()
+
+
+    def update(self, new_shape, new_rate):
+        self.shape = new_shape
+        self.rate = new_rate
+
+
+class HorseshoeSelector(BaseSparseSelector):
+
+    def __init__(self, dim, A, B):
+        super().__init__(dim)
+        self.register_parameter("m_tau", parameter=torch.nn.Parameter(torch.zeros(1)))
+        self.register_parameter("log_var_tau", parameter=torch.nn.Parameter(torch.zeros(1)))
+        self.phi_tau = InverseGamma(shape=torch.tensor(0.5), rate=torch.tensor(A))
+        self.register_parameter("m_lambda", parameter=torch.nn.Parameter(torch.zeros(self.dim, 1)))
+        self.register_parameter("log_var_lambda", parameter=torch.nn.Parameter(torch.zeros(self.dim, 1)))
+        self.phi_lambda = InverseGamma(shape=torch.ones(self.dim)*0.5, rate=torch.ones(self.dim) * B)
+
+
+    def entropy(self):
+        # entropy of log Gaussian for tau
+        entropy_tau = self.m_tau + 0.5 * (self.log_var_tau + np.log(2. * np.pi) + 1)
+        # entropy of log Gaussian for lambda
+        entropy_lambda = self.m_lambda + 0.5 * (self.log_var_lambda + np.log(2. * np.pi) + 1)
+        entropy_lambda = entropy_lambda.sum()
+        # TODO: there is entropy for phi but it does not effect optimization. Should I include it?
+        return entropy_tau + entropy_lambda
+
+    def sample_tau(self):
+        mean = self.m_tau
+        var = torch.exp(self.log_var_tau)
+        sample = mean + torch.sqrt(var) * torch.randn_like(var)
+        return sample
+
+    def sample_phi_tau(self):
+        pass
+
+    def sample_phi_lambda(self):
+        pass
+
+    def sample_lambda(self):
+        mean = self.m_lambda
+        var = torch.exp(self.log_var_lambda)
+        sample = mean + torch.sqrt(var) * torch.randn_like(var)
+        return sample
+
+    def log_prior(self):
+
+        tau = self.sample_tau()
+
+        lamda = self.sample_lambda()
+
+        def log_density_inverse_gamma(x, alpha, beta:InverseGamma):
+            ret = alpha * beta.expect_log() - torch.log(torch.digamma(alpha)) - (alpha + 1) * torch.log(x) - beta.expect() / x
+            return ret
+
+        log_prior_tau = log_density_inverse_gamma(tau, 0.5, self.)
+
+
+
+
+    def kl_divergence(self):
+        return - self.entropy() - self.log_prior()
+
+    def __cal__(self):
+        pass
 
 
 class StructuralSparseGP(ApproximateGP):
