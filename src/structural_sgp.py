@@ -232,66 +232,124 @@ class InverseGamma(object):
         self.shape = new_shape
         self.rate = new_rate
 
+class LogNormal(object):
+
+    def __init__(self, mean, log_var):
+        self.mean = mean
+        self.log_var = log_var
+
+    def expect_log_x(self):
+        return self.mean
+
+    def entropy(self):
+        return self.mean + self.log_var + 0.5 * (np.log(2. * np.pi) + 1)
+
+    def expect_inverse(self):
+        return torch.exp(-self.mean + 0.5 * torch.exp(self.log_var))
+
+    def sample(self):
+        var = torch.exp(self.log_var)
+        s = self.mean + torch.sqrt(var) * torch.randn_like(var)
+        return torch.exp(s)
+
+class Normal(object):
+
+    def __init__(self, mean, log_var):
+        self.mean = mean
+        self.log_var = log_var
+
+    def entropy(self):
+        return 0.5 * (self.log_var + np.log(2. * np.pi) + 1)
+
+    def log_prior(self):
+        """Expectation of log Normal(0, 1)"""
+        ret = -0.5 * np.log(2. * np.pi) -0.5 * (torch.square(self.mean) + torch.exp(self.log_var))
+        return ret
+
+    def kl_divergence(self):
+        return - self.log_prior() - self.entropy()
+
+    def sample(self):
+        sqrt_var = torch.exp(0.5 * self.log_var)
+        return self.mean + sqrt_var * torch.randn_like(sqrt_var)
+
+
 
 class HorseshoeSelector(BaseSparseSelector):
 
     def __init__(self, dim, A, B):
         super().__init__(dim)
+
+        # tau
         self.register_parameter("m_tau", parameter=torch.nn.Parameter(torch.zeros(1)))
         self.register_parameter("log_var_tau", parameter=torch.nn.Parameter(torch.zeros(1)))
+        self.q_tau = LogNormal(self.m_tau, self.log_var_tau)
         self.phi_tau = InverseGamma(shape=torch.tensor(0.5), rate=torch.tensor(A))
+
+        # lambda
         self.register_parameter("m_lambda", parameter=torch.nn.Parameter(torch.zeros(self.dim, 1)))
         self.register_parameter("log_var_lambda", parameter=torch.nn.Parameter(torch.zeros(self.dim, 1)))
+        self.q_lambda = LogNormal(self.m_lambda, self.log_var_lambda)
         self.phi_lambda = InverseGamma(shape=torch.ones(self.dim)*0.5, rate=torch.ones(self.dim) * B)
 
+        # w
+        self.register_parameter("m_w", parameter=torch.nn.Parameter(torch.randn(self.dim, 1)))
+        self.register_parameter("log_var_w", parameter=torch.nn.Parameter(torch.zeros(self.dim, 1)))
+        self.q_w = Normal(self.m_w, self.log_var_w)
+
+        # s2 for linear regression
+        self.register_parameter("raw_s2", parameter=torch.nn.Parameter(torch.zeros(1)))
+        s2_constraint = Positive()
+        self.register_constraint("raw_s2", s2_constraint)
+
+    @property
+    def s2(self):
+        return self.raw_s2_constraint.transform(self.raw_s2)
 
     def entropy(self):
         # entropy of log Gaussian for tau
-        entropy_tau = self.m_tau + 0.5 * (self.log_var_tau + np.log(2. * np.pi) + 1)
+        entropy_tau = self.q_tau.entropy()
         # entropy of log Gaussian for lambda
-        entropy_lambda = self.m_lambda + 0.5 * (self.log_var_lambda + np.log(2. * np.pi) + 1)
+        entropy_lambda = self.q_lambda.entropy()
         entropy_lambda = entropy_lambda.sum()
         # TODO: there is entropy for phi but it does not effect optimization. Should I include it?
+        entropy_phi_tau = self.phi_tau.entropy()
+        entropy_phi_lambda = self.phi_lambda.entropy()
         return entropy_tau + entropy_lambda
 
-    def sample_tau(self):
-        mean = self.m_tau
-        var = torch.exp(self.log_var_tau)
-        sample = mean + torch.sqrt(var) * torch.randn_like(var)
-        return sample
-
-    def sample_phi_tau(self):
-        pass
-
-    def sample_phi_lambda(self):
-        pass
-
-    def sample_lambda(self):
-        mean = self.m_lambda
-        var = torch.exp(self.log_var_lambda)
-        sample = mean + torch.sqrt(var) * torch.randn_like(var)
-        return sample
 
     def log_prior(self):
 
-        tau = self.sample_tau()
-
-        lamda = self.sample_lambda()
-
-        def log_density_inverse_gamma(x, alpha, beta:InverseGamma):
-            ret = alpha * beta.expect_log() - torch.log(torch.digamma(alpha)) - (alpha + 1) * torch.log(x) - beta.expect() / x
+        def log_density_inverse_gamma(x: LogNormal, alpha, beta:InverseGamma):
+            """log PDF of IG(x; alpha, 1/beta)"""
+            ret = - alpha * beta.expect_log() - torch.lgamma(alpha)\
+                  - (alpha + 1) * x.expect_log_x() - beta.expect_inverse() * x.expect_inverse()
             return ret
 
-        log_prior_tau = log_density_inverse_gamma(tau, 0.5, self.)
+        log_prior_tau = log_density_inverse_gamma(self.q_tau, torch.tensor(0.5), self.phi_tau)
+        log_prior_lambda = log_density_inverse_gamma(self.q_lambda, torch.tensor(0.5), self.phi_lambda)
 
+        # TODO: Like entropy function, there is log prior for phi variables
 
+        return log_prior_tau + log_prior_lambda.sum()
 
 
     def kl_divergence(self):
-        return - self.entropy() - self.log_prior()
+        w_kl_divergence = self.q_w.kl_divergence().sum()
+        return w_kl_divergence - self.entropy() - self.log_prior()
 
-    def __cal__(self):
-        pass
+    def update_tau_lambda(self):
+        new_shape = torch.tensor(1.)
+        new_rate = self.q_tau.expect_inverse() + 1.
+        self.phi_tau.update(new_shape, new_rate)
+        new_rate_phi_lambda = self.q_lambda.expect_inverse() + 1.
+        self.phi_lambda.update(new_shape, new_rate_phi_lambda)
+
+    def __call__(self):
+        tau = self.q_tau.sample()
+        lamda = self.q_lambda.sample()
+        w = self.q_w.sample()
+        return w * tau * lamda
 
 
 class StructuralSparseGP(ApproximateGP):
