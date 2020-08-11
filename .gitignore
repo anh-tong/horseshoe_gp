@@ -1,2 +1,9 @@
 /.idea/
 /src/__pycache__
+
+/experimental/.ipynb_checkpoints
+/experimental/__pycache__
+/experimental_jh/.ipynb_checkpoints
+/experimental_jh/__pycache__
+/src/.ipynb_checkpoints
+/src/__pycache__
