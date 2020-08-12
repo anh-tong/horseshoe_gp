@@ -1,14 +1,16 @@
 import math
+
+import matplotlib.pyplot as plt
 import numpy as np
 import torch
-from gpytorch.means import ZeroMean
-from gpytorch.kernels import RBFKernel, PeriodicKernel
-from src.structural_sgp import VariationalGP, StructuralSparseGP, TrivialSelector, SpikeAndSlabSelector, \
-    SpikeAndSlabSelectorV2, HorseshoeSelector
-from src.mean_field_hs import MeanFieldHorseshoe, VariatioalHorseshoe
+from gpytorch.kernels import RBFKernel
 from gpytorch.likelihoods import GaussianLikelihood
+from gpytorch.means import ZeroMean
 from gpytorch.mlls import VariationalELBO, PredictiveLogLikelihood
-import matplotlib.pyplot as plt
+
+from src.structural_sgp import VariationalGP, StructuralSparseGP
+
+from src.sparse_selector import TrivialSelector, SpikeAndSlabSelector, HorseshoeSelector
 
 # toy data
 train_x = torch.linspace(0, 1, 100)
@@ -75,14 +77,6 @@ def test_object_horseshoe():
     print("kl", horseshoe.kl_divergence())
     # print("", horseshoe.q_w.kl_divergence())
     print(horseshoe())
-
-
-def test_object_spike_and_slab_v2():
-    ss = SpikeAndSlabSelectorV2(5)
-    sample = ss()
-    print(sample)
-    print(ss.gumbel_sample())
-    print(ss.kl_divergence())
 
 
 def create_linear_data():
@@ -285,8 +279,6 @@ def test_gp_horseshoe():
 
 # test_trivial_model()
 # test_object_spike_and_slab()
-# test_object_spike_and_slab_v2()
-# test_linear_regression_spike_and_slab_v2()
 # test_linear_regression_spike_and_slab()
 
 # test_gp_spike_and_slab()
