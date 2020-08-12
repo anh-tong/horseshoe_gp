@@ -35,22 +35,6 @@ def acq_max(bounds, sur_model, y_max, acq_fun, n_warmup = 10000, iteration = 10)
             
     return torch.clip(x_max, bounds[:, 0], bounds[:, 1])
 
-###acqusition functions
-def UCB(x, sur_model, kappa = 2.576):
-    mean, std = sur_model(x)
-    return mean + kappa * std
-
-def EI(x, sur_model, y_max):
-    mean, std = sur_model(x)
-    a = (mean - ymax - x)
-    z = a / std
-    return a * norm.cdf(z) + std * norm.pdf(z)
-
-def POI(x, sur_model, y_max):
-    mean, std = sur_model(x)
-    z = (mean - y_max - x)/std
-    return norm.cdf(z)
-
 ###models
 def horseshoe():
     
