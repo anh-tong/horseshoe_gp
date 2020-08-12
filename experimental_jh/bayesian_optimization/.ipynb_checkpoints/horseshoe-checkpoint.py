@@ -30,4 +30,3 @@ gps = []
 for mean, kernel in zip(means, kernels):
     gp = VariationalGP(mean, kernel, inducing_points)
     gps.append(gp)
-
