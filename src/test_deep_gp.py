@@ -150,7 +150,13 @@ def run_deep_gp(n_iter=500, lr=0.01):
                 print("Iter: {} \t Loss: {:.2f}".format(i, loss.item()))
 
 
-run_deep_gp()
+    deep_gp.eval()
+    means, variances, lls = deep_gp.predict(test_loader)
+    rmse = torch.mean(torch.pow(means.mean(0) - y_test, 2)).sqrt()
+    print("RMSE: {}\t NLL:{}".format(rmse.item(), lls.mean().item()))
+
+
+run_deep_gp(n_iter=100)
 
 
 
