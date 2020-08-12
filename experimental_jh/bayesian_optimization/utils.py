@@ -92,19 +92,15 @@ class goldstein_price(acq_fun):
 class rosenbrock(acq_fun):
     def __init__(self):
         super().__init__(
-                         [[-30], [30]],
-                         [(1)],
+                         [[-30] * 10, [30] * 10],
+                         [(1) * 10],
                          0)
+        self.dim = 10
                          
     def value(self, x):
-        if self.dim == None:
-            self.dim = x.shape[0]
-            self.bounds = [
-                self.bounds[0][0] * x.shape[0],
-                self.bounds[0][1] * x.shape[0]]
-            self.sols = [self.sols[0] * x.shape[0]]
-                
+        if isinstance(x, int):
+            x = [x]
         res = 0.0
-        for dim in range(x.shape[0] - 1):
+        for dim in range(self.dim - 1):
             res += 100 * (x[dim+1] - x[dim]**2)**2 + (x[dim] - 1)**2
         return res
