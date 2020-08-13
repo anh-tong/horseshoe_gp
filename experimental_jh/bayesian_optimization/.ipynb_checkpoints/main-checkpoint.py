@@ -42,8 +42,9 @@ from horseshoe_gp.src.mean_field_hs import MeanFieldHorseshoe, VariatioalHorsesh
 
 from botorch.fit import fit_gpytorch_model
 eval("from botorch.acquisition.analytic import " + args.acq_fun)
+from botorch.test_functions.synthetic import Hartmann, branin, SixHumpCamel, rosenbrock
 
-from utils import branin_rcos, six_hump_camel_back, hartman_6, goldstein_price, rosenbrock
+from utils import goldstein_price
 
 # set up kernels
 n_kernels = 5
@@ -62,25 +63,26 @@ for mean, kernel in zip(means, kernels):
 eval("selector = " + args.selector + "(dim=n_kernels, A=1., B=1.)")
 eval("model = " + args.model + "(gps, selector)")
 
-dim = 5
-num_restarts = 3
-num_raw_samples = 100
-
 likelihood = GaussianLikelihood()
 elbo = PredictiveLogLikelihood(likelihood, model, num_data=args.num_raw_samples)
 optimizer = torch.optim.Adam(list(model.parameters()) + list(likelihood.parameters()), lr=0.01)
 
-for i in range(100):
-    optimizer.zero_grad()
-    selector.update_tau_lambda()
-    output = model(##train_x)
-    loss = - elbo(output, ##train_y)
-    loss.backward(retain_graph=True)
-    optimizer.step()
-    print("Iter: {} \t Loss: {:.2f}".format(i, loss.item()))
-
-#for tries in range(args.num_trial):
+for opt in [Hartmann, branin, SixHumpCamel, rosenbrock, goldstein_price]:
+    bench_fun = opt()
     
+    init_pnt = torch.empty(10).random_()
+    
+    for i in range(100):
+        optimizer.zero_grad()
+        selector.update_tau_lambda()
+        output = model(##train_x)
+        loss = - elbo(output, ##train_y)
+        loss.backward(retain_graph=True)
+        optimizer.step()
+        print("Iter: {} \t Loss: {:.2f}".format(i, loss.item()))
+
+    for tries in range(args.num_trial):
+        
     
     
     

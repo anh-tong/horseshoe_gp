@@ -1,12 +1,6 @@
 import math
 import torch
 
-import gpytorch
-from gpytorch.means import ZeroMean
-from gpytorch.kernels import RBFKernel, PeriodicKernel
-from gpytorch.likelihoods import GaussianLikelihood
-from gpytorch.mlls import VariationalELBO, PredictiveLogLikelihood
-
 ###Benchmark Black-Box Funtions
 #https://arxiv.org/pdf/1308.4008.pdf
 
