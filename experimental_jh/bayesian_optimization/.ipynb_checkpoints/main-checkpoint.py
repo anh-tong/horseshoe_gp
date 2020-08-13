@@ -1,17 +1,16 @@
 import sys
-sys.path.append("../../..")
+sys.path.append("../..")
 
 import argparse
 
 parser = argparse.ArgumentParser()
 
 parser.add_argument('--selector', '-s',
-choices=["TrivialSelector", "SpikeAndSlabSelector", "SpikeAndSlabSelectorV2", "HorseshoeSelector"],
+choices=["TrivialSelector", "SpikeAndSlabSelector", "HorseshoeSelector"],
 help='''
 Selectors:
 TrivialSelector
 SpikeAndSlabSelector
-SpikeAndSlabSelectorV2
 HorseshoeSelector
 ''', default = "HorseshoeSelector")
 
@@ -32,6 +31,7 @@ parser.add_argument('--num_inducing', '-i', type = int, default = 10)
 args = parser.parse_args()
 
 import math
+import torch
 
 import gpytorch
 from gpytorch.means import ZeroMean
@@ -39,12 +39,11 @@ from gpytorch.kernels import RBFKernel, PeriodicKernel
 from gpytorch.likelihoods import GaussianLikelihood
 from gpytorch.mlls import VariationalELBO, PredictiveLogLikelihood
 
-from horseshoe_gp.src.structural_sgp import VariationalGP, StructuralSparseGP
-eval("from horseshoe_gp.src.structural_sgp import " + args.selector)
-from horseshoe_gp.src.mean_field_hs import MeanFieldHorseshoe, VariatioalHorseshoe
+from src.structural_sgp import VariationalGP, StructuralSparseGP
+exec("from src.sparse_selector import " + args.selector)
 
 from botorch.fit import fit_gpytorch_model
-eval("from botorch.acquisition.analytic import " + args.acq_fun)
+exec("from botorch.acquisition.analytic import " + args.acq_fun)
 
 from utils import branin_rcos, six_hump_camel_back, hartman_6, goldstein_price, rosenbrock
 
@@ -52,7 +51,7 @@ for opt in [branin_rcos, six_hump_camel_back, hartman_6, goldstein_price, rosenb
     bench_fun = opt()
     
     n_inducing = 10
-    inducing_points = torch.linspace(0, 1, n_inducing).repeat(bench_fun.dim, axis = 0)
+    inducing_points = torch.linspace(0, 1, n_inducing).repeat(bench_fun.dim).view(-1, 1)
     
     # set up kernels
     n_kernels = 5
@@ -65,8 +64,8 @@ for opt in [branin_rcos, six_hump_camel_back, hartman_6, goldstein_price, rosenb
         gp = VariationalGP(mean, kernel, inducing_points)
         gps.append(gp)
 
-    eval("selector = " + args.selector + "(dim=n_kernels, A=1., B=1.)")
-    eval("model = " + args.model + "(gps, selector)")
+    exec("selector = " + args.selector + "(dim=n_kernels, A=1., B=1.)")
+    model = StructuralSparseGP(gps, selector)
 
     likelihood = GaussianLikelihood()
     elbo = PredictiveLogLikelihood(likelihood, model, num_data=args.num_raw_samples)
