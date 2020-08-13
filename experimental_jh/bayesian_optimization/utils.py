@@ -20,6 +20,9 @@ class acq_fun:
                 return False
         return True
     
+    def scale(self, x):
+        raise NotImplementedError()
+    
     def value(self, x):
         raise NotImplementedError()
 
@@ -32,6 +35,7 @@ class branin_rcos(acq_fun):
         self.dim = 2
         
     def value(self, x):
+        x = self.scale(x)
         x1, x2 = x
         return (x2 - 5.1/(4*(math.pi**2))*(x1**2) + 5/math.pi*x1 - 6)**2 + 10*(1-1/(8*math.pi))*math.cos(x1)+10
 
@@ -44,6 +48,7 @@ class six_hump_camel_back(acq_fun):
         self.dim = 2
         
     def value(self, x):
+        x = self.scale(x)
         x1, x2 = x
         return (4-2.1*(x1**2)+(x1**4)/3)*(x1**2)+x1*x2+(4*(x2**2)-4)*(x2**2)
 
@@ -69,6 +74,7 @@ class hartman_6(acq_fun):
         self.c = torch.Tensor([1, 1.2, 3, 3.2])
         
     def value(self, x): 
+        x = self.scale(x)
         return float(-(self.c*(-self.A*((torch.Tensor(x).repeat(4).view(4, -1) - self.P)**2)).sum(1).exp()).sum())
 
 class goldstein_price(acq_fun):
@@ -80,6 +86,7 @@ class goldstein_price(acq_fun):
         self.dim = 2
         
     def value(self, x):
+        x = self.scale(x)
         x1, x2 = x
         return (1 + (x1 + x2 + 1)**2 * (19 - 14 *x1 + 3*(x1**2) - 14*x2 + 6*x1*x2 + 3*(x2**2)))*(30 + (2*x1 - 3*x2)**2 * (18 - 32*x1 + 12* (x1**2) + 48 * x2 - 36*x1*x2 + 27*(x2**2)))
 
@@ -94,6 +101,7 @@ class rosenbrock(acq_fun):
     def value(self, x):
         if isinstance(x, int):
             x = [x]
+        x = self.scale(x)
         res = 0.0
         for dim in range(self.dim - 1):
             res += 100 * (x[dim+1] - x[dim]**2)**2 + (x[dim] - 1)**2
