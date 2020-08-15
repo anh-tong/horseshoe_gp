@@ -57,8 +57,8 @@ for opt in [branin_rcos, six_hump_camel_back, hartman_6, goldstein_price, rosenb
     bench_fun = opt()
     
     n_inducing = args.num_inducing
-    inducing_points = torch.stack([torch.linspace(0, 1, n_inducing)] * bench_fun.dim, dim = 0)
-    
+    inducing_points = torch.stack([torch.linspace(0, 1, n_inducing)] * bench_fun.dim, dim = 1)
+
     # set up kernels
     n_kernels = args.n_kernels
     means = [ZeroMean()] * n_kernels
@@ -82,7 +82,7 @@ for opt in [branin_rcos, six_hump_camel_back, hartman_6, goldstein_price, rosenb
         exec("acq_fun = " + args.acq_fun + "(model, best_f=0.2)")
         
     #Initial Points given
-    x = torch.empty(bench_fun.dim, args.num_raw_samples) * (bench_fun.bound[1] - bench_fun.bound[0]).view(-1, 1) + bench_fun.bound[0].view(-1, 1)
+    x = torch.empty(args.num_raw_samples, bench_fun.dim) * (bench_fun.bound[1] - bench_fun.bound[0]).view(1, -1) + bench_fun.bound[0].view(1, -1)
     y = bench_fun.value(x)
     
     #Load modules to GPU
@@ -98,6 +98,7 @@ for opt in [branin_rcos, six_hump_camel_back, hartman_6, goldstein_price, rosenb
     optimizer = torch.optim.Adam(list(model.parameters()) + list(likelihood.parameters()), lr=0.01)
     
     #Initiali Training
+    print("---Initial training---")
     for ind in range(args.num_step):
         optimizer.zero_grad()
         selector.update_tau_lambda()
@@ -118,6 +119,7 @@ for opt in [branin_rcos, six_hump_camel_back, hartman_6, goldstein_price, rosenb
         
     #Bayesian Optimization iteration
     for tries in range(args.num_trial):
+        print("try: %d" %tries)
         pass
         
         elbo = PredictiveLogLikelihood(likelihood, model, num_data=args.num_raw_samples + tries)

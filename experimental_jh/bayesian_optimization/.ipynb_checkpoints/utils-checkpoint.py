@@ -32,7 +32,8 @@ class branin_rcos(acq_fun):
         self.dim = 2
         
     def value(self, x):
-        x1, x2 = x
+        x1 = x[:, 0]
+        x2 = x[:, 1]
         return (x2 - 5.1/(4*(math.pi**2))*(x1.pow(2)) + 5/math.pi*x1 - 6).pow(2) + 10*(1-1/(8*math.pi))*torch.cos(x1)+10
 
 class six_hump_camel_back(acq_fun):
