@@ -17,7 +17,7 @@ HorseshoeSelector
 ''', default = "HorseshoeSelector")
 
 parser.add_argument('--acq_fun', '-a',
-choices=["ExpectedImprovement", "UpperConfidenceBound", "ProbabilityOfImprovement"],
+choices=["ExpectedImprovement", "UpperConfidenceBound_", "ProbabilityOfImprovement"],
 help='''
 Acqusition Functions:
 UpperConfidenceBound
@@ -30,7 +30,8 @@ parser.add_argument('--batch_size', '-b', type = int, default = 4)
 parser.add_argument('--num_raw_samples', '-r', type = int, default = 20)
 parser.add_argument('--num_inducing', '-i', type = int, default = 10)
 parser.add_argument('--n_kernels', '-k', type = int, default = 5)
-parser.add_argument('--num_step', '-p', type = int, default = 100, help = "Number of steps to optimize surrogate model for each BO stages")
+parser.add_argument('--num_step', '-p', type = int, default = 10, help = "Number of steps to optimize surrogate model for each BO stages")
+parser.add_argument('--learning_rate', '-l', type = float, default = 3e-4, help = "learning rate in Adam optimizer")
 
 args = parser.parse_args()
 
@@ -49,7 +50,7 @@ from src.structural_sgp import VariationalGP, StructuralSparseGP
 exec("from src.sparse_selector import " + args.selector)
 
 exec("from botorch.acquisition.analytic import " + args.acq_fun)
-from botorch.generation.gen import gen_candidates_torch, get_best_candidates
+from botorch.generation.gen import gen_candidates_scipy
 
 from utils import branin_rcos, six_hump_camel_back, hartman_6, goldstein_price, rosenbrock
 
@@ -95,7 +96,7 @@ for opt in [branin_rcos, six_hump_camel_back, hartman_6, goldstein_price, rosenb
         x = x.cuda()
         y = y.cuda()
     
-    optimizer = torch.optim.Adam(list(model.parameters()) + list(likelihood.parameters()), lr=0.01)
+    optimizer = torch.optim.Adam(list(model.parameters()) + list(likelihood.parameters()), lr=args.learning_rate)
     
     #Initiali Training
     print("---Initial training---")
@@ -106,10 +107,10 @@ for opt in [branin_rcos, six_hump_camel_back, hartman_6, goldstein_price, rosenb
         loss = - elbo(output, y)
         loss.backward(retain_graph=True)
         optimizer.step()
-        print("Iter: {} \t Loss: {:.2f}".format(i, loss.item()))
+        print("Iter: {} \t Loss: {:.2f}".format(ind, loss.item()))
         
-    batch_candidates, batch_acq_values, gen_candidates_torch(
-        initial_conditions=x,
+    batch_candidates, batch_acq_values = gen_candidates_scipy(
+        initial_conditions=x.view(-1, 1, bench_fun.dim),
         acquisition_function=acq_fun,
         lower_bounds = bench_fun.bound[0],
         upper_bounds = bench_fun.bound[1])
