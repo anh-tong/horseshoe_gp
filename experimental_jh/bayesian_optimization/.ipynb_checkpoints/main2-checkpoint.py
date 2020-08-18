@@ -23,7 +23,7 @@ Acqusition Functions:
 UpperConfidenceBound
 ExpectedImprovement
 ProbabilityOfImprovement
-''', default = "ExpectedImprovement")
+''', default = "UpperConfidenceBound")
 
 parser.add_argument('--num_trial', '-t', type = int, default = 10, help = "Number of Bayesian Optimization Interations")
 parser.add_argument('--batch_size', '-b', type = int, default = 4)
@@ -65,6 +65,7 @@ from botorch.models.utils import gpt_posterior_settings
 from botorch.models.gpytorch import GPyTorchModel
 from botorch.acquisition import qExpectedImprovement
 from botorch.sampling import IIDNormalSampler
+from botorch.optim import optimize_acqf
 
 from utils import branin_rcos, six_hump_camel_back, hartman_6, goldstein_price, rosenbrock
 
@@ -101,9 +102,9 @@ for opt in [branin_rcos, six_hump_camel_back, hartman_6, goldstein_price, rosenb
     elbo = PredictiveLogLikelihood(likelihood, model, num_data=args.num_raw_samples)
     
     if args.acq_fun == "UpperConfidenceBound":
-        exec("acq_fun = " + args.acq_fun + "(model, beta=0.2)")
+        exec("acq_fun = " + args.acq_fun + "(model, beta=0.1)")
     else:
-        exec("acq_fun = " + args.acq_fun + "(model, best_f=0.2)")
+        exec("acq_fun = " + args.acq_fun + "(model, best_f=0.1)")
         
     #Initial Points given
     x = torch.empty(args.num_raw_samples, bench_fun.dim).to(device)
