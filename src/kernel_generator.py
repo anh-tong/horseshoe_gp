@@ -46,13 +46,22 @@ class Generator():
 
         return kernels
 
+    def create_upto(self, upto_order):
+        ret = []
+        for i in range(upto_order):
+            kernels = self.create(order=i + 1)
+            ret.extend(kernels)
+
+        return ret
+
+
     def init_param(self, k):
         """TODO: intialize parameter accounding to data"""
         pass
 
 
-generator = Generator(None)
+# generator = Generator(None)
 # print(generator.create_first_order())
 # print(generator.create(2))
-print(len(generator.create(2)))
-print(len(generator.create(3)))
+# print(len(generator.create(2)))
+# print(len(generator.create(3)))

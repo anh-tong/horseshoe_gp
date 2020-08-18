@@ -222,15 +222,15 @@ def test_linear_regression_horseshoe():
 def test_gp_spike_and_slab():
 
     selector = SpikeAndSlabSelector(dim=n_kernels, gumbel_temp=.5)
-    model = StructuralSparseGP(gps, selector)
 
     likelihood = GaussianLikelihood()
-    elbo = PredictiveLogLikelihood(likelihood, model, num_data=100)
+    model = StructuralSparseGP(gps, selector, likelihood=likelihood)
 
-    output = model(train_x)
-    optimizer = torch.optim.Adam(list(model.parameters()) + list(likelihood.parameters()), lr=0.01)
+    elbo = PredictiveLogLikelihood(model.likelihood, model, num_data=100)
 
-    for i in range(5000):
+    optimizer = torch.optim.Adam(list(model.parameters()), lr=0.01)
+
+    for i in range(2000):
         optimizer.zero_grad()
         output = model(train_x)
         loss = - elbo(output, train_y)
@@ -250,7 +250,7 @@ def test_gp_spike_and_slab():
 def test_gp_horseshoe():
 
     selector = HorseshoeSelector(dim=n_kernels, A=1., B=1.)
-    model = StructuralSparseGP(gps, selector)
+    model = StructuralSparseGP(gps, selector, likelihood=None)
 
     likelihood = GaussianLikelihood()
     elbo = PredictiveLogLikelihood(likelihood, model, num_data=100)
@@ -281,9 +281,9 @@ def test_gp_horseshoe():
 # test_object_spike_and_slab()
 # test_linear_regression_spike_and_slab()
 
-# test_gp_spike_and_slab()
+test_gp_spike_and_slab()
 
 
 # test_object_horseshoe()
 # test_linear_regression_horseshoe()
-test_gp_horseshoe()
+# test_gp_horseshoe()

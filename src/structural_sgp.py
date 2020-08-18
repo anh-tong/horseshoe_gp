@@ -13,7 +13,7 @@ from src.sparse_selector import BaseSparseSelector
 class VariationalGP(ApproximateGP):
 
     def __init__(self, mean, kernel, inducing_points):
-        variational_dist = CholeskyVariationalDistribution(inducing_points.size(-1))
+        variational_dist = CholeskyVariationalDistribution(inducing_points.size(0))
         variational_strat = VariationalStrategy(self, inducing_points, variational_dist)
         super().__init__(variational_strat)
         self.mean_module = mean
@@ -27,13 +27,14 @@ class VariationalGP(ApproximateGP):
 
 class StructuralSparseGP(ApproximateGP):
 
-    def __init__(self, gps: List[ApproximateGP], selector: BaseSparseSelector):
+    def __init__(self, gps: List[ApproximateGP], selector: BaseSparseSelector, likelihood):
         super().__init__(None)
         # sanity check #kernels = #dimension
         assert len(gps) == selector.dim
         self.selector = selector
         self.gps = ModuleList(gps)
         self.variational_strategy = StructuralVariationalStrategy(self)
+        self.likelihood = likelihood
 
     def forward(self, x):
         pass
