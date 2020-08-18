@@ -31,7 +31,7 @@ parser.add_argument('--num_raw_samples', '-r', type = int, default = 20)
 parser.add_argument('--num_inducing', '-i', type = int, default = 10)
 parser.add_argument('--n_kernels', '-k', type = int, default = 5)
 parser.add_argument('--num_step', '-p', type = int, default = 50, help = "Number of steps to optimize surrogate model for each BO stages")
-parser.add_argument('--learning_rate', '-l', type = float, default = 3e-4, help = "learning rate in Adam optimizer")
+parser.add_argument('--learning_rate', '-l', type = float, default = 3e-6, help = "learning rate in Adam optimizer")
 
 args = parser.parse_args()
 
@@ -54,6 +54,7 @@ from gpytorch.mlls import VariationalELBO, PredictiveLogLikelihood
 from src.structural_sgp import VariationalGP, StructuralSparseGP
 exec("from src.sparse_selector import " + args.selector)
 
+from botorch import fit_gpytorch_model
 exec("from botorch.acquisition.analytic import " + args.acq_fun)
 from botorch.generation.gen import gen_candidates_torch
 from botorch.generation.gen import gen_candidates_scipy
@@ -62,6 +63,8 @@ from botorch.generation.gen import gen_candidates_scipy
 from botorch.posteriors.gpytorch import GPyTorchPosterior
 from botorch.models.utils import gpt_posterior_settings
 from botorch.models.gpytorch import GPyTorchModel
+from botorch.acquisition import qExpectedImprovement
+from botorch.sampling import IIDNormalSampler
 
 from utils import branin_rcos, six_hump_camel_back, hartman_6, goldstein_price, rosenbrock
 
@@ -109,6 +112,8 @@ for opt in [branin_rcos, six_hump_camel_back, hartman_6, goldstein_price, rosenb
     optimizer = torch.optim.Adam(
         list(model.parameters()) + list(likelihood.parameters()),
         lr=args.learning_rate)
+    
+    fit_gpytorch_model(elbo)
     
     #Initiali Training
     print("---Initial training---")

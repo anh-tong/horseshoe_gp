@@ -30,7 +30,7 @@ parser.add_argument('--batch_size', '-b', type = int, default = 4)
 parser.add_argument('--num_raw_samples', '-r', type = int, default = 20)
 parser.add_argument('--num_inducing', '-i', type = int, default = 10)
 parser.add_argument('--n_kernels', '-k', type = int, default = 5)
-parser.add_argument('--num_step', '-p', type = int, default = 10, help = "Number of steps to optimize surrogate model for each BO stages")
+parser.add_argument('--num_step', '-p', type = int, default = 50, help = "Number of steps to optimize surrogate model for each BO stages")
 parser.add_argument('--learning_rate', '-l', type = float, default = 3e-4, help = "learning rate in Adam optimizer")
 
 args = parser.parse_args()
@@ -122,7 +122,7 @@ for opt in [branin_rcos, six_hump_camel_back, hartman_6, goldstein_price, rosenb
         
     #Bayesian Optimization iteration
     for tries in range(args.num_trial):
-        print("try: %d" %(tries + 1))
+        print("\ntry: %d" %(tries + 1))
         batch_candidates, batch_acq_values = gen_candidates_torch(
             initial_conditions=x.view(-1, 1, bench_fun.dim),
             acquisition_function=acq_fun,
@@ -134,6 +134,8 @@ for opt in [branin_rcos, six_hump_camel_back, hartman_6, goldstein_price, rosenb
         y = torch.cat([y, bench_fun(batch_candidates)], dim = 0)
         
         elbo.num_data += 1
+        
+        print("\n")
         
         for ind in range(args.num_step):
             optimizer.zero_grad()
