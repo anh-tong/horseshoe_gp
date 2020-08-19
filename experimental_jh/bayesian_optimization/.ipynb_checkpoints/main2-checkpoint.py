@@ -17,13 +17,13 @@ HorseshoeSelector
 ''', default = "HorseshoeSelector")
 
 parser.add_argument('--acq_fun', '-a',
-choices=["ExpectedImprovement", "UpperConfidenceBound_", "ProbabilityOfImprovement"],
+choices=["qExpectedImprovement", "qUpperConfidenceBound", "qProbabilityOfImprovement"],
 help='''
 Acqusition Functions:
-UpperConfidenceBound
-ExpectedImprovement
-ProbabilityOfImprovement
-''', default = "UpperConfidenceBound")
+qUpperConfidenceBound
+qExpectedImprovement
+qProbabilityOfImprovement
+''', default = "qUpperConfidenceBound")
 
 parser.add_argument('--num_trial', '-t', type = int, default = 10, help = "Number of Bayesian Optimization Interations")
 parser.add_argument('--batch_size', '-b', type = int, default = 4)
@@ -55,7 +55,6 @@ from src.structural_sgp import VariationalGP, StructuralSparseGP
 exec("from src.sparse_selector import " + args.selector)
 
 from botorch import fit_gpytorch_model
-exec("from botorch.acquisition.analytic import " + args.acq_fun)
 from botorch.generation.gen import gen_candidates_torch
 from botorch.generation.gen import gen_candidates_scipy
 #Standard setting is to use L-BFGS-D for optimizing acqusition function
@@ -63,7 +62,10 @@ from botorch.generation.gen import gen_candidates_scipy
 from botorch.posteriors.gpytorch import GPyTorchPosterior
 from botorch.models.utils import gpt_posterior_settings
 from botorch.models.gpytorch import GPyTorchModel
-from botorch.acquisition import qExpectedImprovement
+if args.acq_fun == "qUpperConfidenceBound":
+    exec("from botorch.acquisition.monte_carlo import " + args.acq_fun)
+else:
+    exec("from botorch.acquisition.analytic import " + args.acq_fun)
 from botorch.sampling import IIDNormalSampler
 from botorch.optim import optimize_acqf
 
@@ -101,7 +103,7 @@ for opt in [branin_rcos, six_hump_camel_back, hartman_6, goldstein_price, rosenb
     likelihood = GaussianLikelihood().to(device)
     elbo = PredictiveLogLikelihood(likelihood, model, num_data=args.num_raw_samples)
     
-    if args.acq_fun == "UpperConfidenceBound":
+    if args.acq_fun == "qUpperConfidenceBound":
         exec("acq_fun = " + args.acq_fun + "(model, beta=0.1)")
     else:
         exec("acq_fun = " + args.acq_fun + "(model, best_f=0.1)")
