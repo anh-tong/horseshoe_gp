@@ -14,7 +14,7 @@ class VariationalGP(ApproximateGP):
 
     def __init__(self, mean, kernel, inducing_points):
         variational_dist = CholeskyVariationalDistribution(inducing_points.size(0))
-        variational_strat = VariationalStrategy(self, inducing_points, variational_dist)
+        variational_strat = VariationalStrategy(self, inducing_points, variational_dist, learn_inducing_locations=True)
         super().__init__(variational_strat)
         self.mean_module = mean
         self.covar_model = kernel
