@@ -1,23 +1,20 @@
 import numpy as np
 import tensorflow as tf
 
-from gpflow.kernels import RBF, Periodic, Linear
+from gpflow.kernels import RBF, Periodic, Linear, Product
 from gpflow.models import SVGP
 from gpflow.likelihoods import Gaussian
+from src.kernel_generator_tf import Periodic2
 from src.structural_sgp_tf import StructuralSVGP
 from src.sparse_selector_tf import HorseshoeSelector, SpikeAndSlabSelector
 from src.kernel_generator_tf import Generator
+from src.utils import get_dataset
+from gpflow import set_trainable
 
 
-def load_data():
-    import scipy.io as sio
-    from sklearn.model_selection import train_test_split
-    data = sio.loadmat("../data/01-airline.mat")
-    x = data["X"].astype(np.float)
-    y = data["y"].astype(np.float)
-    x_train, x_test, y_train, y_test = train_test_split(x, y, test_size=0.1, random_state=123)
-
-    return x_train, y_train, x_test, y_test
+def load_data(name="airline"):
+    dataset = get_dataset(name)
+    return dataset
 
 
 def init_inducing_points(x, M=100):
@@ -33,9 +30,28 @@ def make_data_iteration(x, y, batch_size=128, shuffle=True):
     return data_iter
 
 
+def fix_kernel_variance(kernels):
+    """kernel variance is fixed. the variance is decided by selector"""
+    for kernel in kernels:
+        if isinstance(kernel, Product):
+            fix_kernel_variance(kernel.kernels)
+        elif isinstance(kernel, Periodic2):
+            set_trainable(kernel.base_kernel.variance, False)
+        else:
+            set_trainable(kernel.variance, False)
+
+
 def create_model(inducing_point, num_data) -> StructuralSVGP:
     generator = Generator()
-    kernels = generator.create_upto(2)
+    # kernels = generator.create_upto(2)
+    kernels = [RBF(),
+               Periodic2(),
+               Product([RBF(), Periodic2()]),
+               RBF(),
+               Periodic2(),
+               Product([RBF(), Periodic2()])]
+
+    fix_kernel_variance(kernels)
     gps = []
     for kernel in kernels:
         gp = SVGP(kernel, likelihood=None, inducing_variable=inducing_point)
@@ -93,11 +109,13 @@ def plot(x, y, x_prime, y_prime, upper, lower):
     plt.show()
 
 
-def run(batch_size=128):
+def run(name="airline", batch_size=128):
 
     # data
-    x_train, y_train, x_test, y_test = load_data()
+    dataset = load_data(name)
+    x_train, y_train = dataset.get_train()
     train_iter = make_data_iteration(x_train, y_train, batch_size=batch_size)
+    x_test, y_test = dataset.get_test()
     test_iter = make_data_iteration(x_test, y_test, batch_size=batch_size, shuffle=False)
 
     inducing_point = init_inducing_points(x_train)
@@ -117,7 +135,7 @@ def run(batch_size=128):
 
     # plot for 1D case
     n_test = 300
-    x_test = tf.linspace(x_train.min(), x_train.max(), n_test)[:, None]
+    x_test = tf.linspace(tf.reduce_min(x_train), tf.reduce_max(x_train), n_test)[:, None]
     y_test = tf.zeros_like(x_test)
     plot_iter = make_data_iteration(x_test, y_test, shuffle=False)
     mu, var, _ = test(plot_iter, model)
@@ -127,10 +145,11 @@ def run(batch_size=128):
     plot(x_train, y_train, x_test.numpy(), mu.numpy(), lower.numpy(), upper.numpy())
 
 
-
-run()
-
-
+if __name__ == "__main__":
+    # run(name="solar") # TODO: have a problem running this
+    # run(name="airline")
+    # run(name="mauna")
+    run(name="wheat-price")
 
 
 
