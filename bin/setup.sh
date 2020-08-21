@@ -1,0 +1,2 @@
+pip install gpflow
+pip install tensorflow_datasets
