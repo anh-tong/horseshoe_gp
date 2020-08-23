@@ -12,8 +12,8 @@ class UCB:
         self.kappa = 2.576
         
     def __call__(self, x, ymax = None):
-        mean, std = self.model.predict_y(x)
-        return mean + self.kappa * std
+        mean, std = self.model.predict_f(x)
+        return tf.squeeze(mean + self.kappa * std)
 
 class EI:
     def __init__(self, model):
@@ -22,10 +22,10 @@ class EI:
         self.norm = tfp.distributions.Normal(tf.zeros(1,  dtype=tf.dtypes.float64), tf.ones(1,  dtype=tf.dtypes.float64))
         
     def __call__(self, x, ymax):
-        mean, std = self.model.predict_y(x)
+        mean, std = self.model.predict_f(x)
         a = (mean - ymax - self.eps)
         z = a / std
-        return a * self.norm.cdf(z) + std * self.norm.prob(z)
+        return tf.squeeze(a * self.norm.cdf(z) + std * self.norm.prob(z))
 
 class POI:
     def __init__(self, model):
@@ -36,7 +36,7 @@ class POI:
     def __self__(self, x, ymax):
         mean, std = self.model.predict_y(x)        
         z = (mean - ymax - self.eps)/std
-        return self.norm.cdf(z)
+        return tf.squeeze(self.norm.cdf(z))
 
 ###Test Functions
 class test_fun:
