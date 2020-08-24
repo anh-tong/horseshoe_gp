@@ -27,14 +27,14 @@ class VariationalGP(ApproximateGP):
 
 class StructuralSparseGP(ApproximateGP):
 
-    def __init__(self, gps: List[ApproximateGP], selector: BaseSparseSelector):
+    def __init__(self, gps: List[ApproximateGP], selector: BaseSparseSelector, likelihood):
         super().__init__(None)
         # sanity check #kernels = #dimension
         assert len(gps) == selector.dim
         self.selector = selector
         self.gps = ModuleList(gps)
         self.variational_strategy = StructuralVariationalStrategy(self)
-        self.num_outputs = 1
+        self.likelihood = likelihood
 
     def forward(self, x):
         pass
