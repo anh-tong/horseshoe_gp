@@ -45,7 +45,7 @@ UCB: Upper Confidence Bound
 POI: Probability of Improvement
 ''', default = "EI")
 
-parser.add_argument('--num_trial', '-t', type = int, default = 100, help = "Number of Bayesian Optimization Interations")
+parser.add_argument('--num_trial', '-t', type = int, default = 50, help = "Number of Bayesian Optimization Interations")
 parser.add_argument('--num_raw_samples', '-r', type = int, default = 5)
 
 ###This parts is not used in Baseline
@@ -136,11 +136,13 @@ if __name__ == "__main__":
             )
             x = x * (obj_fun.upper_bound -obj_fun.lower_bound) + obj_fun.lower_bound
             y = tf.expand_dims(obj_fun(x), 1)
+            
+            y_start = tf.reduce_min(y, axis=0).numpy()
 
             ###model
             model = gpflow.models.GPR(
                 data=(x, y),
-                kernel=gpflow.kernels.Matern52(),
+                kernel=gpflow.kernels.SquaredExponential(),
                 mean_function=None)
 
             exec("acq_fun = " + args.acq_fun + "(model)")
@@ -170,7 +172,7 @@ if __name__ == "__main__":
 
                 model = gpflow.models.GPR(
                     data=(x, y),
-                    kernel=gpflow.kernels.Matern52(),
+                    kernel=gpflow.kernels.SquaredExponential(),
                     mean_function=None)
 
                 optimizer.minimize(
@@ -179,9 +181,10 @@ if __name__ == "__main__":
                     options=dict(maxiter=20))
 
                 #Result
-                df_result.loc[tries, num_test] = tf.reduce_min(y, axis=0).numpy()
+                y_end = tf.reduce_min(y, axis=0).numpy()
+                df_result.loc[tries, num_test] = y_end
 
-            print(bench_fun.__name__ + "-test:%d" %(num_test + 1))
+            print(bench_fun.__name__ + "-test %d: %f->%f" %(num_test + 1, y_start, y_end))
             num_test += 1
             
         except:
