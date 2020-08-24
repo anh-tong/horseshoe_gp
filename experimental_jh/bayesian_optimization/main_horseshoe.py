@@ -34,11 +34,9 @@ HorseshoeSelector
 parser.add_argument('--num_inducing', '-i', type = int, default = 10)
 parser.add_argument('--n_kernels', '-k', type = int, default = 5)
 
-"""
 parser.add_argument('--bench_fun', '-b',
 choices=["branin_rcos", "six_hump_camel_back", "goldstein_price", "rosenbrock", "hartman_6"],
 default="branin_rcos")
-"""
 
 parser.add_argument('--acq_fun', '-a',
 choices=["EI", "UCB", "POI"],
@@ -57,12 +55,15 @@ parser.add_argument('--learning_rate', '-l', type = float, default = 3e-4, help 
 args = parser.parse_args()
 #-------------------------argparse-------------------------
 
-#exec("from utils import " + args.bench_fun)
-#exec("bench_fun = " + args.bench_fun)
-from utils import branin_rcos, six_hump_camel_back, goldstein_price, rosenbrock, hartman_6, Styblinski_Tang, Michalewicz
+exec("from utils import " + args.bench_fun)
+exec("bench_fun = " + args.bench_fun)
 
 exec("from utils import " + args.acq_fun)
 exec("acq_fun = " + args.acq_fun + "()")
+
+from src.sparse_selector_tf import HorseshoeSelector
+from src.structural_sgp_tf import StructuralSVGP
+from src.kernel_generator_tf import Generator
 
 def acq_max(lb, ub, sur_model, y_max, acq_fun, n_warmup = 10000, iteration = 10):
     x_tries = tf.random.uniform(
@@ -101,76 +102,83 @@ def acq_max(lb, ub, sur_model, y_max, acq_fun, n_warmup = 10000, iteration = 10)
 if __name__ == "__main__":
     
     ###Result directory
-    save_file = "./GP_SE/"
+    save_file = "./Horseshoe/"
     
-    for bench_fun in [Michalewicz]:
-        obj_fun = bench_fun()
+    obj_fun = bench_fun()
+    
+    df_result = pd.DataFrame(
+        0,
+        index=range(args.num_trial+1),
+        columns=range(args.num_init))  
 
-        df_result = pd.DataFrame(
-            0,
-            index=range(args.num_trial+1),
-            columns=range(args.num_init))  
+    num_test = 0
+    while num_test < args.num_init:
 
-        num_test = 0
-        while num_test < args.num_init:
-            ###n_inducing = args.num_inducing
+        #Initial Points given
+        x = tf.random.uniform(
+            (1, obj_fun.dim),
+            dtype=tf.dtypes.float64
+        )
+        x = x * (obj_fun.upper_bound -obj_fun.lower_bound) + obj_fun.lower_bound
+        y = tf.expand_dims(obj_fun(x), 1)
 
-            #Initial Points given
-            x = tf.random.uniform(
-                (1, obj_fun.dim),
-                dtype=tf.dtypes.float64
-            )
-            x = x * (obj_fun.upper_bound -obj_fun.lower_bound) + obj_fun.lower_bound
-            y = tf.expand_dims(obj_fun(x), 1)
+        y_start = tf.reduce_min(y, axis=0).numpy()
+        
+        df_result.loc[0, num_test] = y_start
+        
+        ###number of inducing variables
+        n_inducing = args.num_inducing
 
-            y_start = tf.reduce_min(y, axis=0).numpy()
+        ###model
+        generator = Generator()
+        kernels = generator.create_upto(2)
+        gps = []
+        for kernel in kernels:
+            gp = SVGP(kernel, likelihood=None, inducing_variable=inducing_point)
+            gps.append(gp)
+            
+        selector = HorseshoeSelector(dim=len(gps))
+        likelihood = Gaussian()
+        model = StructuralSVGP(gps, selector, likelihood, num_data)
 
-            df_result.loc[0, num_test] = y_start
+        #Initiali Training
+        optimizer = tf.keras.optimizers.Adam(
+            learning_rate=args.learning_rate)
 
-            ###model
+        optimizer.minimize(
+            model.training_loss,
+            model.trainable_variables)
+
+        #Bayesian Optimization iteration
+        for tries in range(args.num_trial):
+            x_new = acq_max(
+                obj_fun.lower_bound,
+                obj_fun.upper_bound,
+                model,
+                tf.reduce_max(y),
+                acq_fun)
+            
+            #Evaluation of new points
+            y_new = tf.expand_dims(obj_fun(x_new), 1)
+
+            x = tf.concat([x, x_new], 0)
+            y = tf.concat([y, y_new], 0)
+
+            ###model initialization again
             model = gpflow.models.GPR(
                 data=(x, y),
                 kernel=gpflow.kernels.SquaredExponential(),
                 mean_function=None)
-
-            #Initiali Training
-            optimizer = tf.keras.optimizers.Adam(
-                learning_rate=args.learning_rate)
-
+            
             optimizer.minimize(
                 model.training_loss,
                 model.trainable_variables)
 
-            #Bayesian Optimization iteration
-            for tries in range(args.num_trial):
-                x_new = acq_max(
-                    obj_fun.lower_bound,
-                    obj_fun.upper_bound,
-                    model,
-                    tf.reduce_max(y),
-                    acq_fun)
+            #Result
+            y_end = tf.reduce_min(y, axis=0).numpy()
+            df_result.loc[tries + 1, num_test] = y_end
 
-                #Evaluation of new points
-                y_new = tf.expand_dims(obj_fun(x_new), 1)
-
-                x = tf.concat([x, x_new], 0)
-                y = tf.concat([y, y_new], 0)
-
-                ###model initialization again
-                model = gpflow.models.GPR(
-                    data=(x, y),
-                    kernel=gpflow.kernels.SquaredExponential(),
-                    mean_function=None)
-
-                optimizer.minimize(
-                    model.training_loss,
-                    model.trainable_variables)
-
-                #Result
-                y_end = tf.reduce_min(y, axis=0).numpy()
-                df_result.loc[tries + 1, num_test] = y_end
-
-            print(bench_fun.__name__ + "-test %d: %f->%f" %(num_test + 1, y_start, y_end))
-            num_test += 1
-
-        df_result.to_csv(save_file + args.acq_fun + "_" + bench_fun.__name__ + ".csv")
+        print(bench_fun.__name__ + "-test %d: %f->%f" %(num_test + 1, y_start, y_end))
+        num_test += 1
+    
+    df_result.to_csv(save_file + args.acq_fun + "_" + bench_fun.__name__ + ".csv")

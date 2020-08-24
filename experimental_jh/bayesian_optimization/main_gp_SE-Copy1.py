@@ -6,6 +6,7 @@ sys.path.append("../..")
 
 
 import gpflow
+from gpflow.optimizers import NaturalGradient
 
 import tensorflow as tf
 tf.random.set_seed(2020)
@@ -59,10 +60,14 @@ args = parser.parse_args()
 
 #exec("from utils import " + args.bench_fun)
 #exec("bench_fun = " + args.bench_fun)
-from utils import branin_rcos, six_hump_camel_back, goldstein_price, rosenbrock, hartman_6, Styblinski_Tang, Michalewicz
+from utils import branin_rcos, six_hump_camel_back, goldstein_price, rosenbrock, hartman_6
 
 exec("from utils import " + args.acq_fun)
 exec("acq_fun = " + args.acq_fun + "()")
+
+from src.sparse_selector_tf import HorseshoeSelector
+from src.structural_sgp_tf import StructuralSVGP
+from src.kernel_generator_tf import Generator
 
 def acq_max(lb, ub, sur_model, y_max, acq_fun, n_warmup = 10000, iteration = 10):
     x_tries = tf.random.uniform(
@@ -101,9 +106,9 @@ def acq_max(lb, ub, sur_model, y_max, acq_fun, n_warmup = 10000, iteration = 10)
 if __name__ == "__main__":
     
     ###Result directory
-    save_file = "./GP_SE/"
+    save_file = "./Horseshoe/"
     
-    for bench_fun in [Michalewicz]:
+    for bench_fun in [branin_rcos, six_hump_camel_back, goldstein_price, rosenbrock, hartman_6]:
         obj_fun = bench_fun()
 
         df_result = pd.DataFrame(
@@ -113,8 +118,6 @@ if __name__ == "__main__":
 
         num_test = 0
         while num_test < args.num_init:
-            ###n_inducing = args.num_inducing
-
             #Initial Points given
             x = tf.random.uniform(
                 (1, obj_fun.dim),
@@ -127,11 +130,20 @@ if __name__ == "__main__":
 
             df_result.loc[0, num_test] = y_start
 
+            ###number of inducing variables
+            n_inducing = args.num_inducing
+
             ###model
-            model = gpflow.models.GPR(
-                data=(x, y),
-                kernel=gpflow.kernels.SquaredExponential(),
-                mean_function=None)
+            generator = Generator()
+            kernels = generator.create_upto(2)
+            gps = []
+            for kernel in kernels:
+                gp = SVGP(kernel, likelihood=None, inducing_variable=inducing_point)
+                gps.append(gp)
+                
+            selector = HorseshoeSelector(dim=len(gps))
+            likelihood = Gaussian()
+            model = StructuralSVGP(gps, selector, likelihood, num_data)
 
             #Initiali Training
             optimizer = tf.keras.optimizers.Adam(

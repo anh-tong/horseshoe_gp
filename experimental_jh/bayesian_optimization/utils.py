@@ -51,7 +51,7 @@ class test_fun:
         
     def check_fun(self):
         for ind, pnt in enumerate(self.sols):
-            if self(pnt) == self.sol_val:
+            if self(tf.expand_dims(pnt, 0)) == self.sol_val:
                 pass
             else:
                 print(ind + 1)
@@ -122,9 +122,9 @@ class hartman_6(test_fun):
 class goldstein_price(test_fun):
     def __init__(self):
         super().__init__(
-            np.array([-2]*2, dtype=np.float64),
-            np.array([2]*2, dtype=np.float64),
-            np.array([(0, -1)], dtype = np.float64),
+            tf.constant([-2]*2, dtype = tf.dtypes.float64),
+            tf.constant([2]*2, dtype = tf.dtypes.float64),
+            tf.constant([(0, -1)], dtype = tf.dtypes.float64),
             3)
         self.dim = 2
         
@@ -134,16 +134,43 @@ class goldstein_price(test_fun):
         return (1 + tf.pow(x1 + x2 + 1, 2) * (19 - 14 *x1 + 3*tf.pow(x1, 2) - 14*x2 + 6*x1*x2 + 3*tf.pow(x2, 2))*(30 + tf.pow(2*x1 - 3*x2, 2) * (18 - 32*x1 + 12* (tf.pow(x1, 2)) + 48 * x2 - 36*x1*x2 + 27*tf.pow(x2, 2))))
 
 class rosenbrock(test_fun):
-    def __init__(self):
+    def __init__(self, dim = 10):
         super().__init__(
-            tf.constant([-30] * 10, dtype = tf.dtypes.float64),
-            tf.constant([30] * 10, dtype = tf.dtypes.float64),
-            tf.constant([(1) * 10], dtype = tf.dtypes.float64),
+            tf.constant([-30] * dim, dtype = tf.dtypes.float64),
+            tf.constant([30] * dim, dtype = tf.dtypes.float64),
+            tf.constant([(1) * dim], dtype = tf.dtypes.float64),
             0)
-        self.dim = 10
+        self.dim = dim
                          
     def __call__(self, x):
         res = 0.0
         for dim in range(self.dim - 1):
             res += 100 * (x[:, dim+1] - x[:, dim]**2)**2 + (x[:, dim] - 1)**2
         return res
+    
+class Styblinski_Tang(test_fun):
+    def __init__(self, dim = 10):
+        super().__init__(
+            tf.constant([-4] * dim, dtype = tf.dtypes.float64),
+            tf.constant([4] * dim, dtype = tf.dtypes.float64),
+            tf.constant([-2.9] * dim, dtype = tf.dtypes.float64),
+            -391.65950000000004
+        )
+        self.dim = dim
+    
+    def __call__(self, x):
+        return tf.reduce_sum(tf.pow(x, 4) - 16*tf.pow(x, 2) + 5 * x, axis = 0) / 2
+    
+class Michalewicz(test_fun):
+    def __init__(self, dim = 10):
+        super().__init__(
+            tf.constant([0] * dim, dtype = tf.dtypes.float64),
+            tf.constant(tf.repeat(tf.expand_dims(pi, axis = 0), dim, axis = 0), dtype = tf.dtypes.float64),
+            tf.constant([0] * dim, dtype = tf.dtypes.float64),
+            -9.66
+        )
+        self.dim = dim
+        self.const = tf.expand_dims(tf.constant(range(self.dim), dtype = tf.dtypes.float64), 0)
+        
+    def __call__(self, x):
+        return -tf.reduce_sum(tf.math.sin(x) * tf.pow(tf.math.sin(tf.math.sin(self.const * tf.pow(x,2) / pi)), 20), axis = 1)
