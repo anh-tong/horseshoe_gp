@@ -171,4 +171,4 @@ if __name__ == "__main__":
         print(bench_fun.__name__ + "-test %d: %f->%f" %(num_test + 1, y_start, y_end))
         num_test += 1
     
-    df_result.to_csv(save_file + bench_fun.__name__ + ".csv")
+    df_result.to_csv(save_file + args.acq_fun + "_" + bench_fun.__name__ + ".csv")
