@@ -46,12 +46,12 @@ POI: Probability of Improvement
 ''', default = "EI")
 
 parser.add_argument('--num_trial', '-t', type = int, default = 100, help = "Number of Bayesian Optimization Interations")
-parser.add_argument('--num_raw_samples', '-r', type = int, default = 20)
+parser.add_argument('--num_raw_samples', '-r', type = int, default = 5)
 
 ###This parts is not used in Baseline
 parser.add_argument('--num_inducing', '-i', type = int, default = 10)
 parser.add_argument('--n_kernels', '-k', type = int, default = 5)
-parser.add_argument('--num_init', '-n', type = int, default = 10,
+parser.add_argument('--num_init', '-n', type = int, default = 50,
                     help = "Number of runs for each benchmark function to change intial points randomly.")
 parser.add_argument('--num_step', '-p', type = int, default = 50,
                     help = "Number of steps to optimize surrogate model for each BO stages")
