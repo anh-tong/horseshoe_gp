@@ -18,7 +18,7 @@ class UCB:
 
 class EI:
     def __init__(self):
-        self.eps = 0.0
+        self.eps = 0.01
         self.norm = tfp.distributions.Normal(
             tf.zeros(1, dtype=tf.dtypes.float64),
             tf.ones(1, dtype=tf.dtypes.float64))
@@ -30,7 +30,7 @@ class EI:
 
 class POI:
     def __init__(self):
-        self.eps = 0.0
+        self.eps = 0.01
         self.norm = tfp.distributions.Normal(
             tf.zeros(1,  dtype=tf.dtypes.float64),
             tf.ones(1,  dtype=tf.dtypes.float64))
