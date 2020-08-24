@@ -9,34 +9,34 @@ pi = tf.constant(np.pi, dtype = tf.dtypes.float64)
 
 ###Acqusition Functions
 class UCB:
-    def __init__(self, model):
-        self.model = model
+    def __init__(self):
         self.kappa = 2.576
         
-    def __call__(self, x, ymax = None):
-        mean, std = self.model.predict_f(x)
+    def __call__(self, x, model, ymax = None):
+        mean, std = model.predict_f(x)
         return tf.squeeze(mean + self.kappa * std)
 
 class EI:
-    def __init__(self, model):
-        self.model = model
+    def __init__(self):
         self.eps = 0.0
-        self.norm = tfp.distributions.Normal(tf.zeros(1,  dtype=tf.dtypes.float64), tf.ones(1,  dtype=tf.dtypes.float64))
+        self.norm = tfp.distributions.Normal(
+            tf.zeros(1, dtype=tf.dtypes.float64),
+            tf.ones(1, dtype=tf.dtypes.float64))
         
-    def __call__(self, x, ymax):
-        mean, std = self.model.predict_f(x)
-        a = (mean - ymax - self.eps)
-        z = a / std
-        return tf.squeeze(a * self.norm.cdf(z) + std * self.norm.prob(z))
+    def __call__(self, x, model, ymax):
+        mean, std = model.predict_f(x)
+        z = (mean - ymax - self.eps) / std
+        return tf.squeeze(std * (z * self.norm.cdf(z) + self.norm.prob(z)))
 
 class POI:
-    def __init__(self, model):
-        self.model = model
+    def __init__(self):
         self.eps = 0.0
-        self.norm = tfp.distributions.Normal(tf.zeros(1,  dtype=tf.dtypes.float64), tf.ones(1,  dtype=tf.dtypes.float64))
+        self.norm = tfp.distributions.Normal(
+            tf.zeros(1,  dtype=tf.dtypes.float64),
+            tf.ones(1,  dtype=tf.dtypes.float64))
         
-    def __self__(self, x, ymax):
-        mean, std = self.model.predict_y(x)        
+    def __self__(self, x, model, ymax):
+        mean, std = model.predict_y(x)        
         z = (mean - ymax - self.eps)/std
         return tf.squeeze(self.norm.cdf(z))
 
@@ -116,7 +116,7 @@ class hartman_6(test_fun):
         x = -self.A*tf.pow(x - self.P, 2)
         x = tf.exp(tf.reduce_sum(x, axis = 2))
         x = self.c*x
-        x = -np.sum(x, axis = 1)
+        x = -tf.reduce_sum(x, axis = 1)
         return x
 
 class goldstein_price(test_fun):
