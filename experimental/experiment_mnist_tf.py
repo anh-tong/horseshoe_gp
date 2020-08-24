@@ -26,10 +26,12 @@ def init_mnist_inducing_points(train_dataset, M=100, save_dir="../model/mnist_in
 
 
 
-def create_classifier_model(inducing_point, input_dim, num_data, num_class, n_kernels=10) -> StructuralSVGP:
+def create_classifier_model(inducing_point, input_dim, num_data, num_class, n_kernels=5) -> StructuralSVGP:
 
     # TODO: initialize lengthscales
-    kernels = [RBF()] * n_kernels
+    kernels = [RBF(lengthscales=np.ones(input_dim)),
+               Product([RBF(lengthscales=np.ones(input_dim)),
+                        Periodic2(period=np.ones(input_dim))])] * n_kernels
 
     fix_kernel_variance(kernels)
 
@@ -71,7 +73,7 @@ def run_mnist():
 
     model = create_classifier_model(inducing_points, input_dim=dataset.d, num_data=dataset.n_train, num_class=10)
 
-    model = train(model, train_iter, n_iter=50, lr=0.001)
+    model = train(model, train_iter, n_iter=100000, lr=0.01)
 
     test_mnist(test_iter, model)
 

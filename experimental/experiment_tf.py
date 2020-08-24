@@ -68,7 +68,7 @@ def train(model, train_iter, n_iter=10000, lr=0.01):
 
     train_loss = model.training_loss_closure(train_iter)
 
-    @tf.function
+    # @tf.function
     def optimize_step():
         optimizer.minimize(train_loss, model.trainable_variables)
 

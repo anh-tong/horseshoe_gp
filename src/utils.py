@@ -6,6 +6,7 @@ import scipy.io as sio
 from sklearn.model_selection import train_test_split
 from gpflow.utilities import to_default_float
 from typing import Tuple, Dict
+import matplotlib
 
 class Dataset(object):
 
