@@ -116,7 +116,7 @@ if __name__ == "__main__":
     
     
     ###Result directory
-    save_file = "./GP_mattern/"
+    save_file = "./GP_SE/"
     
     obj_fun = bench_fun()
     df_result = pd.DataFrame(

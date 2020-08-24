@@ -114,10 +114,9 @@ class hartman_6(test_fun):
     def __call__(self, x):
         x = tf.repeat(tf.reshape(x, (-1, 1, 6)), 4, axis = 1)
         x = -self.A*tf.pow(x - self.P, 2)
-        print(x.shape)
-        x = self.c*tf.exp(tf.reduce_sum(x, axis = 1))
-        print(x.shape)
-        x = -np.sum(x, axis = 0, keepdims = True)
+        x = tf.exp(tf.reduce_sum(x, axis = 2))
+        x = self.c*x
+        x = -np.sum(x, axis = 1)
         return x
 
 class goldstein_price(test_fun):

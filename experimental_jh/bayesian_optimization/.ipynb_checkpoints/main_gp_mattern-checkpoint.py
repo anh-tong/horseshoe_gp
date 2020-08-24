@@ -126,61 +126,65 @@ if __name__ == "__main__":
 
     num_test = 0
     while num_test < args.num_init:
-        ###n_inducing = args.num_inducing
+        try:
+            ###n_inducing = args.num_inducing
 
-        #Initial Points given
-        x = tf.random.uniform(
-            (args.num_raw_samples, obj_fun.dim),
-            dtype=tf.dtypes.float64
-        )
-        x = x * (obj_fun.upper_bound -obj_fun.lower_bound) + obj_fun.lower_bound
-        y = tf.expand_dims(obj_fun(x), 1)
+            #Initial Points given
+            x = tf.random.uniform(
+                (args.num_raw_samples, obj_fun.dim),
+                dtype=tf.dtypes.float64
+            )
+            x = x * (obj_fun.upper_bound -obj_fun.lower_bound) + obj_fun.lower_bound
+            y = tf.expand_dims(obj_fun(x), 1)
 
-        ###model
-        model = gpflow.models.GPR(
-            data=(x, y),
-            kernel=gpflow.kernels.Matern52(),
-            mean_function=None)
-
-        exec("acq_fun = " + args.acq_fun + "(model)")
-
-        #Initiali Training
-        optimizer = gpflow.optimizers.Scipy()
-
-        optimizer.minimize(
-            model.training_loss,
-            model.trainable_variables,
-            options=dict(maxiter=20))
-
-        #Bayesian Optimization iteration
-        for tries in range(args.num_trial):
-            x_new, y_new = acq_max(
-                obj_fun.lower_bound,
-                obj_fun.upper_bound,
-                model,
-                tf.reduce_max(y),
-                acq_fun)
-
-            x = tf.concat([x, x_new], 0)
-            y = tf.concat([y, y_new], 0)
-
-            #model.data = data_input_to_tensor((x, y))
-            #model.num_latent_gps += 1
-
+            ###model
             model = gpflow.models.GPR(
                 data=(x, y),
                 kernel=gpflow.kernels.Matern52(),
                 mean_function=None)
+
+            exec("acq_fun = " + args.acq_fun + "(model)")
+
+            #Initiali Training
+            optimizer = gpflow.optimizers.Scipy()
 
             optimizer.minimize(
                 model.training_loss,
                 model.trainable_variables,
                 options=dict(maxiter=20))
 
-            #Result
-            df_result.loc[tries, num_test] = tf.reduce_min(y, axis=0).numpy()
+            #Bayesian Optimization iteration
+            for tries in range(args.num_trial):
+                x_new, y_new = acq_max(
+                    obj_fun.lower_bound,
+                    obj_fun.upper_bound,
+                    model,
+                    tf.reduce_max(y),
+                    acq_fun)
 
-        print(bench_fun.__name__ + "-test:%d" %(num_test + 1))
-        num_test += 1
+                x = tf.concat([x, x_new], 0)
+                y = tf.concat([y, y_new], 0)
+
+                #model.data = data_input_to_tensor((x, y))
+                #model.num_latent_gps += 1
+
+                model = gpflow.models.GPR(
+                    data=(x, y),
+                    kernel=gpflow.kernels.Matern52(),
+                    mean_function=None)
+
+                optimizer.minimize(
+                    model.training_loss,
+                    model.trainable_variables,
+                    options=dict(maxiter=20))
+
+                #Result
+                df_result.loc[tries, num_test] = tf.reduce_min(y, axis=0).numpy()
+
+            print(bench_fun.__name__ + "-test:%d" %(num_test + 1))
+            num_test += 1
+            
+        except:
+            continue
     
     df_result.to_csv(save_file + bench_fun.__name__ + ".csv")
