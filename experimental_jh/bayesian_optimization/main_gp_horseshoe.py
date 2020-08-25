@@ -7,6 +7,10 @@ sys.path.append("../..")
 
 import gpflow
 from gpflow.optimizers import NaturalGradient
+from gpflow.models import SVGP, BayesianModel
+from gpflow.likelihoods import Gaussian
+from gpflow.kernels import RBF
+#from gpflow.mean_functions import Zero
 
 import tensorflow as tf
 tf.random.set_seed(2020)
@@ -133,10 +137,16 @@ if __name__ == "__main__":
             ###number of inducing variables
             n_inducing = args.num_inducing
             inducing_point = tf.Variable(tf.random.uniform((n_inducing, obj_fun.dim), dtype=tf.dtypes.float64))
+
+            #Initialize Optimizer
+            optimizer = tf.keras.optimizers.Adam(
+                learning_rate=args.learning_rate)
             
             ###model
             generator = Generator()
-            kernels = generator.create_upto(2)
+            kernels = generator.create_upto(args.n_kernels)
+            #kernels = [RBF(), Periodic2(), Product([RBF(), Periodic2()])] * args.n_kernels
+            
             gps = []
             for kernel in kernels:
                 gp = SVGP(kernel, likelihood=None, inducing_variable=inducing_point)
@@ -144,18 +154,19 @@ if __name__ == "__main__":
                 
             selector = HorseshoeSelector(dim=len(gps))
             likelihood = Gaussian()
-            model = StructuralSVGP(gps, selector, likelihood, num_data)
-
-            #Initiali Training
-            optimizer = tf.keras.optimizers.Adam(
-                learning_rate=args.learning_rate)
-
-            optimizer.minimize(
-                model.training_loss,
-                model.trainable_variables)
+            model = StructuralSVGP(gps, selector, likelihood, n_inducing)
 
             #Bayesian Optimization iteration
             for tries in range(args.num_trial):
+                train_dataset = tf.data.Dataset.from_tensor_slices((x, y)).repeat().shuffle(len(y))
+                train_iter = iter(train_dataset.batch(tries + 2))
+                
+                selector.update_tau_lambda()
+                
+                optimizer.minimize(
+                    model.training_loss_closure(train_iter),
+                    model.trainable_variables)
+                
                 x_new = acq_max(
                     obj_fun.lower_bound,
                     obj_fun.upper_bound,
@@ -168,17 +179,7 @@ if __name__ == "__main__":
 
                 x = tf.concat([x, x_new], 0)
                 y = tf.concat([y, y_new], 0)
-
-                ###model initialization again
-                model = gpflow.models.GPR(
-                    data=(x, y),
-                    kernel=gpflow.kernels.SquaredExponential(),
-                    mean_function=None)
-
-                optimizer.minimize(
-                    model.training_loss,
-                    model.trainable_variables)
-
+                
                 #Result
                 y_end = tf.reduce_min(y, axis=0).numpy()
                 df_result.loc[tries + 1, num_test] = y_end
