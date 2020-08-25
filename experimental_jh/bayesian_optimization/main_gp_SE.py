@@ -109,7 +109,7 @@ if __name__ == "__main__":
         df_result = pd.DataFrame(
             0,
             index=range(args.num_trial+1),
-            columns=range(args.num_init))  
+            columns=range(args.num_init))
 
         num_test = 0
         while num_test < args.num_init:
