@@ -24,7 +24,7 @@ def create_dgp_regression(X, Y, Z, layer_sizes):
 def create_layer(output_dim, inducing_points, whiten):
 
     # TODO: change kernel herew
-    kernels = [RBF(), Product([RBF(), Periodic2()])] * 2
+    kernels = [RBF(), Product([RBF(), Periodic(RBF())])] * 2
     fix_kernel_variance(kernels)
     gps = []
     for kernel in kernels:
@@ -78,13 +78,15 @@ def run_deepgp(n_iter=1000, lr=0.01):
 
     train_iter = make_data_iteration(x_train, y_train, batch_size=128, shuffle=True)
     optimizer = tf.optimizers.Adam(lr=lr)
+
+
     def train_step():
-        for x_batch, y_batch in train_iter:
-            with tf.GradientTape(watch_accessed_variables=False) as tape:
-                tape.watch(model.trainable_variables)
-                objective = -model.elbo((x_batch, y_batch))
-                gradients = tape.gradient(objective, model.trainable_variables)
-            optimizer.apply_gradients(zip(gradients, model.trainable_variables))
+        data_batch = next(train_iter)
+        with tf.GradientTape(watch_accessed_variables=False) as tape:
+            tape.watch(model.trainable_variables)
+            objective = -model.elbo(data_batch)
+            gradients = tape.gradient(objective, model.trainable_variables)
+        optimizer.apply_gradients(zip(gradients, model.trainable_variables))
 
     for i in range(n_iter):
         train_step()

@@ -9,8 +9,9 @@ from gpflow.models.training_mixins import ExternalDataTrainingLossMixin
 
 class DeepGPBase(BayesianModel, ExternalDataTrainingLossMixin):
 
-    def __init__(self, likelihood, layers, num_samples=1, **kwargs):
+    def __init__(self, likelihood, layers, num_samples=1, num_data=None, **kwargs):
         super().__init__(name="DeepGPBase")
+        self.num_data = num_data
         self.num_samples = num_samples
         self.likelihood = BroadcastingLikelihood(likelihood)
         self.layers = layers
@@ -50,30 +51,22 @@ class DeepGPBase(BayesianModel, ExternalDataTrainingLossMixin):
         return tf.reduce_logsumexp(l - log_num_samples, axis=0)
 
     def expected_data_log_likelihood(self, X, Y):
-        """
-        Compute expectations of the data log likelihood under the variational
-        distribution with MC samples
-        """
         F_mean, F_var = self.predict_f(X, num_samples=self.num_samples,
                                        full_cov=False)
         var_exp = self.likelihood.variational_expectations(F_mean, F_var, Y)  # Shape [S, N, D]
         return tf.reduce_mean(var_exp, 0)  # Shape [N, D]
 
     def elbo(self, data):
-        """
-        Computes the evidence lower bound according to eq. (17) in the paper.
-        :param data: Tuple of two tensors for input data X and labels Y.
-        :return: Tensor representing ELBO.
-        """
+
         X, Y = data
         num_data = X.shape[0]
         likelihood = tf.reduce_sum(self.expected_data_log_likelihood(X, Y))
-        # scale loss term corresponding to minibatch size
-        scale = tf.cast(num_data, gpflow.default_float())
-        scale /= tf.cast(X.shape[0], gpflow.default_float())
-        # Compute KL term
+        if self.num_data is not None:
+            scale = tf.cast(num_data, gpflow.default_float())
+            scale /= tf.cast(X.shape[0], gpflow.default_float())
+        else:
+            scale = tf.cast(1., gpflow.default_float())
         KL = tf.reduce_sum([layer.KL() for layer in self.layers])
-        # print(scale*likelihood, -KL)
         return scale * likelihood - KL
 
     def maximum_log_likelihood_objective(self, data) -> tf.Tensor:
