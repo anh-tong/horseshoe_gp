@@ -1,4 +1,4 @@
-from experimental.experiment_tf import *
+from src.experiment_tf import *
 from src.deepgp.deep_gp import DeepGPBase
 from src.deepgp.structural_layer import StructuralSVGPLayer
 from src.deepgp.layers import SVGPLayer

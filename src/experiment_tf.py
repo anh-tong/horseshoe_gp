@@ -11,6 +11,7 @@ from src.kernels import create_rbf, create_period
 from src.kernel_generator_tf import Generator
 from src.utils import get_dataset, get_data_shape
 from gpflow import set_trainable
+import logging
 
 
 def load_data(name="airline"):
@@ -65,6 +66,53 @@ def create_model(inducing_point, data_shape, num_data, selector="horseshoe", ker
     model = StructuralSVGP(gps, selector, likelihood, num_data)
     return model
 
+def train_and_test(model,
+                   train_iter,
+                   x_test,
+                   y_test,
+                   std_y_train,
+                   ckpt_dir,
+                   ckpt_feq=1000,
+                   n_iter=10000,
+                   lr=0.01,
+                   logger=logging.getLogger("default")):
+
+    optimizer = tf.optimizers.Adam(lr=lr)
+    train_loss = model.training_loss_closure(train_iter)
+    ckpt = tf.train.Checkpoint(model=model)
+    manager = tf.train.CheckpointManager(ckpt, ckpt_dir, max_to_keep=3)
+
+    @tf.function
+    def optimize_step():
+        optimizer.minimize(train_loss, model.trainable_variables)
+        # horseshoe update
+        if isinstance(model.selector, HorseshoeSelector):
+            model.selector.update_tau_lambda()
+
+    ckpt.restore(manager.latest_checkpoint)
+    if manager.latest_checkpoint:
+        logger.info("Restore from {} !!!".format(manager.latest_checkpoint))
+    else:
+        logger.info("Initialize from scratch !!!")
+
+    for i in range(n_iter):
+        # optimizer step
+        optimize_step()
+        # horseshoe update
+        # if isinstance(model.selector, HorseshoeSelector):
+        #     model.selector.update_tau_lambda()
+        # save checkpoint
+        if (i + 1) % ckpt_feq == 0:
+            save_path = manager.save()
+            mu, var = model.predict_y(x_test)
+            ll = tf.reduce_mean(model.likelihood.predict_log_density(mu, var, y_test)) - np.log(std_y_train)
+            RMSE = tf.sqrt(tf.reduce_mean(tf.square(mu - y_test))) * std_y_train
+            logger.info("Saved checkpoint for step {}: {}".format(i + 1, save_path))
+            logger.info("Iter {} \t Loss: {:.2f} \t Test RMSE:{} \t Test LL{}".format(i,
+                                                                                    train_loss().numpy(),
+                                                                                    RMSE.numpy(),
+                                                                                    ll.numpy()))
+
 
 def train(model, train_iter, ckpt_dir,ckpt_freq=1000, n_iter=10000, lr=0.01):
     optimizer = tf.optimizers.Adam(lr=lr)
@@ -100,6 +148,7 @@ def train(model, train_iter, ckpt_dir,ckpt_freq=1000, n_iter=10000, lr=0.01):
 
 
 def test_from_checkpoint(date, dataset_name, selector, kernel_order, repetition):
+
     unique_name = create_unique_name(date,dataset_name, kernel_order, repetition, selector)
     ckpt_dir = "../model/{}".format(unique_name)
     dataset = load_data(dataset_name)
@@ -136,15 +185,15 @@ def test_from_checkpoint(date, dataset_name, selector, kernel_order, repetition)
     print("RMSE: {} ".format(rmse.numpy()))
 
     # plot for 1D case
-    n_test = 300
-    x_test = tf.linspace(tf.reduce_min(x_train), tf.reduce_max(x_train), n_test)[:, None]
-    y_test = tf.zeros_like(x_test)
-    plot_iter = make_data_iteration(x_test, y_test, shuffle=False)
-    mu, var, _ = test(plot_iter, model)
-    lower = mu - 1.96 * tf.sqrt(var)
-    upper = mu + 1.96 * tf.sqrt(var)
-
-    plot(x_train, y_train, x_test.numpy(), mu.numpy(), lower.numpy(), upper.numpy())
+    # n_test = 300
+    # x_test = tf.linspace(tf.reduce_min(x_train), tf.reduce_max(x_train), n_test)[:, None]
+    # y_test = tf.zeros_like(x_test)
+    # plot_iter = make_data_iteration(x_test, y_test, shuffle=False)
+    # mu, var, _ = test(plot_iter, model)
+    # lower = mu - 1.96 * tf.sqrt(var)
+    # upper = mu + 1.96 * tf.sqrt(var)
+    #
+    # plot(x_train, y_train, x_test.numpy(), mu.numpy(), lower.numpy(), upper.numpy())
 
 
 def test(test_iter, model: StructuralSVGP):
@@ -171,6 +220,42 @@ def plot(x, y, x_prime, y_prime, upper, lower):
     plt.fill_between(x_prime.squeeze(), lower.squeeze(), upper.squeeze(), alpha=0.2)
     plt.show()
 
+def run_train_and_test(date,
+        dataset_name,
+        selector="horseshoe",
+        kernel_order=2,
+        repetition=2,
+        n_iter=50000,
+        lr=0.01,
+        batch_size=128,
+        plot_n_predict=True,logger=logging.getLogger("default")
+                       ):
+    unique_name = create_unique_name(date, dataset_name, kernel_order, repetition, selector)
+
+    # data
+    dataset = load_data(dataset_name)
+    x_train, y_train = dataset.get_train()
+    train_iter = make_data_iteration(x_train, y_train, batch_size=batch_size)
+    x_test, y_test = dataset.get_test()
+    test_iter = make_data_iteration(x_test, y_test, batch_size=batch_size, shuffle=False)
+
+    inducing_point = init_inducing_points(x_train)
+
+    data_shape = get_data_shape(dataset)
+
+    # create model
+    model = create_model(inducing_point,
+                         selector=selector,
+                         data_shape=data_shape,
+                         num_data=len(y_train),
+                         kernel_order=kernel_order,
+                         repetition=repetition
+                         )
+
+    # train
+    ckpt_dir = "../model/{}".format(unique_name)
+    train_and_test(model, train_iter, x_test, y_test, dataset.std_y_train, ckpt_dir, n_iter=n_iter, lr=lr, logger=logger)
+
 
 def run(date,
         dataset_name,
@@ -180,7 +265,7 @@ def run(date,
         n_iter=50000,
         lr=0.01,
         batch_size=128,
-        plot_n_predict=True
+        plot_n_predict=True,
         ):
 
     unique_name = create_unique_name(date,dataset_name, kernel_order, repetition, selector)

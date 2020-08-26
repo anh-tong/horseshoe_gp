@@ -1,4 +1,4 @@
-from experimental.experiment_tf import *
+from src.experiment_tf import *
 
 date = "0825"
 

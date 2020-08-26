@@ -1,4 +1,6 @@
-
+import os
+import logging
+import time
 import numpy as np
 import tensorflow as tf
 import tensorflow_datasets as tfds
@@ -70,38 +72,61 @@ class UCIDataset(Dataset):
         self.data_dir = data_dir
         super().__init__(name)
 
-    def data(self, test_size=0.1, random_state=123):
-        data, target = self.retrieve()
-        if data.shape[0] < 10000:
-            d = data
-        else:
-            indices = np.random.permutation(range(data.shape[0]))
-            d = data[indices][:10000]
+    # def data(self, test_size=0.1, random_state=123):
+    #     data, target = self.retrieve()
+    #     if data.shape[0] < 10000:
+    #         d = data
+    #     else:
+    #         indices = np.random.permutation(range(data.shape[0]))
+    #         d = data[indices][:10000]
+    #
+    #     pca = PCA(n_components=1)
+    #     pca.fit(d)
+    #     projected = pca.transform(data)
+    #
+    #     ind = list(np.argsort(projected.squeeze()))
+    #     len_ = len(ind)
+    #     test_ind = np.array(ind[: len_ // 15] + ind[-len_ // 15:])
+    #     train_ind = np.array(ind[len_ // 15: -len_ // 15])
+    #     test_ind = test_ind[np.random.permutation(len(test_ind))]
+    #     train_ind = train_ind[np.random.permutation(len(train_ind))]
+    #
+    #     assert len(test_ind) + len(train_ind) == len_, 'train set and test set should add to the whole set'
+    #     assert set(test_ind) - set(train_ind) == set(test_ind), 'train set and test set should be exclusive'
+    #
+    #     x_train, y_train = data[train_ind], target[train_ind]
+    #     x_test, y_test = data[test_ind], target[test_ind]
+    #
+    #     x_train, x_test, _, _ = standardize(x_train, x_test)
+    #     y_train, y_test, _, train_std = standardize(y_train, y_test)
+    #
+    #     self.n_train = x_train.shape[0]
+    #     self.n_test = x_test.shape[0]
+    #     self.std_y_train = train_std
+    #
+    #     self.x_train = to_default_float(x_train)
+    #     self.x_test = to_default_float(x_test)
+    #     self.y_train = to_default_float(y_train)
+    #     self.y_test = to_default_float(y_test)
 
-        pca = PCA(n_components=1)
-        pca.fit(d)
-        projected = pca.transform(data)
+    def data(self, test_size=0.1, random_state=1):
+        x, y = self.retrieve()
+        x_train, x_test, y_train, y_test = train_test_split(x, y,
+                                                            test_size=test_size,
+                                                            random_state=random_state)
 
-        ind = list(np.argsort(projected.squeeze()))
-        len_ = len(ind)
-        test_ind = np.array(ind[: len_ // 15] + ind[-len_ // 15:])
-        train_ind = np.array(ind[len_ // 15: -len_ // 15])
-        test_ind = test_ind[np.random.permutation(len(test_ind))]
-        train_ind = train_ind[np.random.permutation(len(train_ind))]
-
-        assert len(test_ind) + len(train_ind) == len_, 'train set and test set should add to the whole set'
-        assert set(test_ind) - set(train_ind) == set(test_ind), 'train set and test set should be exclusive'
-
-        x_train, y_train = data[train_ind], target[train_ind]
-        x_test, y_test = data[test_ind], target[test_ind]
+        x_train, x_test, _, _ = standardize(x_train, x_test)
+        y_train, y_test, _, std_y_train = standardize(y_train, y_test)
 
         self.n_train = x_train.shape[0]
         self.n_test = x_test.shape[0]
+        self.std_y_train = std_y_train
 
         self.x_train = to_default_float(x_train)
         self.x_test = to_default_float(x_test)
         self.y_train = to_default_float(y_train)
         self.y_test = to_default_float(y_test)
+
 
 
     def retrieve(self):
@@ -222,3 +247,46 @@ def get_data_shape(dataset:ABCDDataset):
     data_shape["x_min_abs_diff"] = np.log(min_abs_diff(X))
 
     return data_shape
+
+def standardize(data_train, *args):
+    """
+    Standardize a dataset to have zero mean and unit standard deviation.
+    :param data_train: 2-D Numpy array. Training data.
+    :param data_test: 2-D Numpy array. Test data.
+    :return: (train_set, test_set, mean, std), The standardized dataset and
+        their mean and standard deviation before processing.
+    """
+    std = np.std(data_train, 0, keepdims=True)
+    std[std == 0] = 1
+    mean = np.mean(data_train, 0, keepdims=True)
+    data_train_standardized = (data_train - mean) / std
+    output = [data_train_standardized]
+    for d in args:
+        dd = (d - mean) / std
+        output.append(dd)
+    output.append(mean)
+    output.append(std)
+    return output
+
+def makedirs(filename):
+    if not os.path.exists(os.path.dirname(filename)):
+        os.makedirs(os.path.dirname(filename))
+
+def create_logger(output_path, name, run_file):
+
+    log_file = "{}_{}.log".format(name, time.strftime('%m-%d-%H-%M-%S'))
+    head = '%(asctime)-15s %(message)s'
+    filename = os.path.join(output_path, log_file)
+    makedirs(filename)
+    logging.basicConfig(filename=filename, format=head)
+    logger = logging.getLogger()
+    logger.setLevel(logging.INFO)
+
+    with open(run_file, 'r') as f:
+        logger.info(f.read())
+
+    console_handler = logging.StreamHandler()
+    console_handler.setLevel(logging.INFO)
+    logger.addHandler(console_handler)
+
+    return logger

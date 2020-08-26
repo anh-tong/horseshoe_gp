@@ -1,7 +1,7 @@
 import os
 import pickle
 
-from experimental.experiment_tf import *
+from src.experiment_tf import *
 from gpflow.likelihoods import MultiClass
 from scipy.cluster.vq import kmeans2
 
