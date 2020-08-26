@@ -35,7 +35,7 @@ class POI:
             tf.zeros(1,  dtype=tf.dtypes.float64),
             tf.ones(1,  dtype=tf.dtypes.float64))
         
-    def __self__(self, x, model, ymax):
+    def __call__(self, x, model, ymax):
         mean, std = model.predict_y(x)        
         z = (mean - ymax - self.eps)/std
         return tf.squeeze(self.norm.cdf(z))

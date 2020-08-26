@@ -110,7 +110,7 @@ def acq_max(lb, ub, sur_model, y_max, acq_fun, n_warmup = 10000, iteration = 10)
 if __name__ == "__main__":
     
     ###Result directory
-    save_file = "./Horseshoe/"
+    save_file = "./GP_Horseshoe/"
     
     for bench_fun in [branin_rcos, six_hump_camel_back, goldstein_price, rosenbrock, hartman_6]:
         obj_fun = bench_fun()
