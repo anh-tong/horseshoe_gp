@@ -6,6 +6,7 @@ sys.path.append("../..")
 
 
 import gpflow
+from gpflow.kernels import SquaredExponential
 
 import tensorflow as tf
 tf.random.set_seed(2020)
@@ -66,6 +67,11 @@ from utils import branin_rcos, six_hump_camel_back, goldstein_price, rosenbrock,
 
 exec("from utils import " + args.acq_fun)
 exec("acq_fun = " + args.acq_fun + "()")
+
+def create_rbf(x):
+    lengthscales = tf.random.normal([1,2], mean=0., stddev=1., dtype=tf.dtypes.float64) + tf.math.reduce_std(x)
+    lengthscales = tf.math.exp(lengthscales)
+    return SquaredExponential(lengthscales=lengthscales)
 
 def acq_max(lb, ub, sur_model, y_max, acq_fun, n_warmup = 10000, iteration = 10):
     bounds = Bounds(lb, ub)
@@ -140,7 +146,7 @@ if __name__ == "__main__":
             ###model
             model = gpflow.models.GPR(
                 data=(x, y),
-                kernel=gpflow.kernels.SquaredExponential(),
+                kernel=create_rbf(x),
                 mean_function=None)
 
             optimizer.minimize(
