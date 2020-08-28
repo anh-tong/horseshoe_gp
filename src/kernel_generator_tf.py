@@ -1,26 +1,20 @@
 import itertools
+from typing import List, Dict
 
-from gpflow.kernels import RBF, Periodic, Linear, Product
-
-class Periodic2(Periodic):
-
-    def __init__(self, period=1.):
-        super().__init__(base_kernel=RBF(), period=period)
+from src.kernels import create_rbf, create_period, create_linear
+from gpflow.kernels import Product, RBF, Kernel
 
 
 class Generator(object):
 
-    def __init__(self, base_cls=None):
-        self.base_cls = [RBF, Periodic2, Linear] if base_cls is None else base_cls
-
-    def init_params(self, k):
-        pass
+    def __init__(self, data_shape, base_fn=None):
+        self.data_shape = data_shape
+        self.base_fn = [create_rbf, create_period, create_linear] if base_fn is None else base_fn
 
     def create_first_order(self):
         kernels = []
-        for cls in self.base_cls:
-            k = cls()
-            self.init_params(k)
+        for generate_fn in self.base_fn:
+            k = generate_fn(self.data_shape)
             kernels.append(k)
         return kernels
 
@@ -28,24 +22,51 @@ class Generator(object):
         if order == 1:
             return self.create_first_order()
         else:
-            comb = itertools.product(self.base_cls, repeat=order)
+            comb = itertools.product(self.base_fn, repeat=order)
             kernels = []
             for c in comb:
                 kernel = []
-                for cls in c:
-                    k = cls()
-                    self.init_params(k)
+                for generate_fn in c:
+                    k = generate_fn(self.data_shape)
                     kernel.append(k)
-                kernels.append(Product(kernel))
+                kernel = reduce_rbf(kernel)
+                if len(kernel) == 1:
+                    # after reduction just single kernel
+                    kernels.append(kernel[0])
+                else:
+                    # multiple kernel
+                    kernels.append(Product(kernel))
 
         return kernels
 
     def create_upto(self, upto_order):
         ret = []
         for i in range(upto_order):
-            kernels = self.create(order=i+1)
+            kernels = self.create(order=i + 1)
             ret.extend(kernels)
 
         return ret
 
 
+def reduce_rbf(kernels: List[Kernel]) -> List[Kernel]:
+    rbf_indices = []
+    for i, kernel in enumerate(kernels):
+        if isinstance(kernel, RBF):
+            rbf_indices += [i]
+
+    if len(rbf_indices) <= 1:
+        return kernels
+    else:
+        non_rbf_indices = [index for index in list(range(len(kernels))) if index not in rbf_indices]
+        non_rbf_indices += [rbf_indices[0]]
+        return [kernels[index] for index in non_rbf_indices]
+
+# # test only
+# if __name__ == "__main__":
+#     from gpflow.kernels import Periodic, Linear
+#     kernels = [RBF(), Linear(), Periodic(RBF())]
+#     assert len(reduce_rbf(kernels)) == 3
+#     kernels = [RBF(), RBF()]
+#     assert len(reduce_rbf(kernels)) == 1
+#     kernels = [RBF(), RBF(), Linear()]
+#     assert len(reduce_rbf(kernels)) == 2
