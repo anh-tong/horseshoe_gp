@@ -44,30 +44,30 @@ class StructuralSVGP(BayesianModel, ExternalDataTrainingLossMixin):
     def predict_f(self, Xnew: InputData, full_cov=False, full_output_cov=False) -> MeanAndVariance:
 
         w = self.selector.sample()
-        # w2 = self.selector.sample()
         w = tf.squeeze(w)
-        # w2 = tf.squeeze(w2)
         means = []
         vars = []
         for i, gp in enumerate(self.gps):
             w_i = w[i]
+            # w_i = truncate_small(w_i)
             mean, var = gp.predict_f(Xnew, full_cov, full_output_cov)
             means += [mean * w_i]
-            vars += [var * w_i**2]
+            w2_i = w_i ** 2
+            w2_i = tf.clip_by_value(w2_i, clip_value_min=1e-2, clip_value_max=1e3)
+            vars += [var * w2_i]
 
         f_mean = sum(means)
         f_var = sum(vars)
         return f_mean, f_var
-        # w_0 = w[0]
-        # gp = self.gps[0]
-        # f_mean, f_var = gp.predict_f(Xnew, full_cov, full_output_cov)
-        # f_mean = w_0**2 * f_mean
-        # f_var = w_0 ** 2 * f_var
-        # for i, gp in enumerate(self.gps[1:]):
-        #     mean, var = gp.predict_f(Xnew, full_cov, full_output_cov)
-        #     f_mean = f_mean + w[i+1] * mean
-        #     f_var = f_var + w[i+1] ** 2 * var
-        #
-        # return f_mean, f_var
+
+    def predict_y(self, Xnew, full_cov=False, full_output_cov=False):
+        f_mean, f_var = self.predict_f(Xnew, full_cov, full_output_cov)
+        return self.likelihood.predict_mean_and_var(f_mean, f_var)
+
+def truncate_small(x, eps=1e-2):
+
+    pos = 0.5 * (1. + tf.sign(x - eps)) * x
+    neg = 0.5 * (1 + tf.sign(-x - eps)) * x
+    return pos - neg
 
 
