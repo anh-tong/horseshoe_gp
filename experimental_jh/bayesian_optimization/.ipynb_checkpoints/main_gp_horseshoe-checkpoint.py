@@ -1,6 +1,3 @@
-import os
-os.environ['TF_CPP_MIN_LOG_LEVEL'] = '3'
-
 import sys
 sys.path.append("../..")
 
@@ -14,6 +11,7 @@ from gpflow.kernels import RBF
 
 import tensorflow as tf
 tf.random.set_seed(2020)
+tf.get_logger().setLevel('ERROR')
 
 import numpy as np
 import pandas as pd
@@ -37,7 +35,7 @@ HorseshoeSelector
 
 ###This parts is not used in Baseline
 parser.add_argument('--num_inducing', '-i', type = int, default = 10)
-parser.add_argument('--n_kernels', '-k', type = int, default = 5)
+parser.add_argument('--n_kernels', '-k', type = int, default = 2)
 
 """
 parser.add_argument('--bench_fun', '-b',
@@ -57,7 +55,8 @@ parser.add_argument('--num_trial', '-t', type = int, default = 200, help = "Numb
 
 parser.add_argument('--num_init', '-n', type = int, default = 10,
                     help = "Number of runs for each benchmark function to change intial points randomly.")
-parser.add_argument('--learning_rate', '-l', type = float, default = 3e-4, help = "learning rate in Adam optimizer")
+parser.add_argument('--learning_rate', '-l', type = float, default = 0.01, help = "learning rate in Adam optimizer")
+parser.add_argument('--num_step', '-u', type = int, default = 10000, help = "number of steps in each BO iteration")
 
 args = parser.parse_args()
 #-------------------------argparse-------------------------
@@ -124,7 +123,7 @@ if __name__ == "__main__":
         while num_test < args.num_init:
             #Initial Points given
             x = tf.random.uniform(
-                (1, obj_fun.dim),
+                (10, obj_fun.dim),
                 dtype=tf.dtypes.float64
             )
             x = x * (obj_fun.upper_bound -obj_fun.lower_bound) + obj_fun.lower_bound
@@ -136,10 +135,13 @@ if __name__ == "__main__":
 
             ###number of inducing variables
             n_inducing = args.num_inducing
-            inducing_point = tf.Variable(tf.random.uniform((n_inducing, obj_fun.dim), dtype=tf.dtypes.float64))
+            inducing_point = tf.random.uniform(
+                (10, obj_fun.dim),
+                dtype=tf.dtypes.float64
+            )
 
             #Initialize Optimizer
-            optimizer = tf.keras.optimizers.Adam(
+            optimizer = tf.optimizers.Adam(
                 learning_rate=args.learning_rate)
             
             ###model
@@ -155,18 +157,15 @@ if __name__ == "__main__":
             selector = HorseshoeSelector(dim=len(gps))
             likelihood = Gaussian()
             model = StructuralSVGP(gps, selector, likelihood, n_inducing)
-
+        
             #Bayesian Optimization iteration
-            for tries in range(args.num_trial):
-                train_dataset = tf.data.Dataset.from_tensor_slices((x, y)).repeat().shuffle(len(y))
-                train_iter = iter(train_dataset.batch(tries + 2))
-                
-                selector.update_tau_lambda()
-                
-                optimizer.minimize(
-                    model.training_loss_closure(train_iter),
-                    model.trainable_variables)
-                
+            for tries in range(args.num_trial):                        
+                for step in range(args.num_step):
+                    optimizer.minimize(
+                        model.training_loss_closure((x, y)),
+                        model.trainable_variables)
+                    model.selector.update_tau_lambda()
+
                 x_new = acq_max(
                     obj_fun.lower_bound,
                     obj_fun.upper_bound,

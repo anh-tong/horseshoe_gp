@@ -153,20 +153,20 @@ class Styblinski_Tang(test_fun):
         super().__init__(
             tf.constant([-4] * dim, dtype = tf.dtypes.float64),
             tf.constant([4] * dim, dtype = tf.dtypes.float64),
-            tf.constant([-2.9] * dim, dtype = tf.dtypes.float64),
+            tf.constant([(-2.9) * dim], dtype = tf.dtypes.float64),
             -391.65950000000004
         )
         self.dim = dim
     
     def __call__(self, x):
-        return tf.reduce_sum(tf.pow(x, 4) - 16*tf.pow(x, 2) + 5 * x, axis = 0) / 2
+        return tf.reduce_sum(tf.pow(x, 4) - 16*tf.pow(x, 2) + 5 * x, axis = 1) / 2
     
 class Michalewicz(test_fun):
     def __init__(self, dim = 10):
         super().__init__(
             tf.constant([0] * dim, dtype = tf.dtypes.float64),
             tf.constant(tf.repeat(tf.expand_dims(pi, axis = 0), dim, axis = 0), dtype = tf.dtypes.float64),
-            tf.constant([0] * dim, dtype = tf.dtypes.float64),
+            tf.constant([(0) * dim], dtype = tf.dtypes.float64),
             -9.66
         )
         self.dim = dim

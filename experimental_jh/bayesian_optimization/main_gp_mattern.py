@@ -1,14 +1,11 @@
-import os
-os.environ['TF_CPP_MIN_LOG_LEVEL'] = '3'
-
 import sys
 sys.path.append("../..")
-
 
 import gpflow
 
 import tensorflow as tf
 tf.random.set_seed(2020)
+tf.get_logger().setLevel('ERROR')
 
 import numpy as np
 import pandas as pd
@@ -107,7 +104,7 @@ if __name__ == "__main__":
     ###Result directory
     save_file = "./GP_mattern/"
     
-    for bench_fun in [branin_rcos, six_hump_camel_back, goldstein_price, rosenbrock, hartman_6, Styblinski_Tang, Michalewicz]:
+    for bench_fun in [Styblinski_Tang, Michalewicz]:
         obj_fun = bench_fun()
 
         df_result = pd.DataFrame(
@@ -121,7 +118,7 @@ if __name__ == "__main__":
 
             #Initial Points given
             x = tf.random.uniform(
-                (1, obj_fun.dim),
+                (10, obj_fun.dim),
                 dtype=tf.dtypes.float64
             )
             x = x * (obj_fun.upper_bound -obj_fun.lower_bound) + obj_fun.lower_bound
@@ -130,7 +127,7 @@ if __name__ == "__main__":
                 y.shape, mean = 0.0, stddev = args.noise_level, dtype=tf.dtypes.float64)
 
             y_start = tf.reduce_min(y, axis=0).numpy()
-
+            
             df_result.loc[0, num_test] = y_start
 
             #Initiali Training

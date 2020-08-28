@@ -1,6 +1,3 @@
-import os
-os.environ['TF_CPP_MIN_LOG_LEVEL'] = '3'
-
 import sys
 sys.path.append("../..")
 
@@ -10,6 +7,7 @@ from gpflow.kernels import SquaredExponential
 
 import tensorflow as tf
 tf.random.set_seed(2020)
+tf.get_logger().setLevel('ERROR')
 
 import numpy as np
 import pandas as pd
@@ -69,8 +67,16 @@ exec("from utils import " + args.acq_fun)
 exec("acq_fun = " + args.acq_fun + "()")
 
 def create_rbf(x):
-    lengthscales = tf.random.normal([1,2], mean=0., stddev=1., dtype=tf.dtypes.float64) + tf.math.reduce_std(x)
-    lengthscales = tf.math.exp(lengthscales)
+    r = np.random.rand()
+    if r < 0.5:
+        lengthscales = tf.random.normal(
+            [1, x.shape[1]], mean=0., stddev=1., dtype=tf.dtypes.float64) + tf.math.reduce_std(x, axis=0)
+        lengthscales = tf.math.exp(lengthscales)
+    else:
+        dist = tf.reduce_max(x, axis = 0) - tf.reduce_min(x, axis = 0)
+        lengthscales = tf.random.normal(
+            [1, x.shape[1]], mean=tf.math.log(2 * dist), stddev=1.0, dtype=tf.dtypes.float64)
+        lengthscales = tf.math.exp(lengthscales)
     return SquaredExponential(lengthscales=lengthscales)
 
 def acq_max(lb, ub, sur_model, y_max, acq_fun, n_warmup = 10000, iteration = 10):
@@ -113,7 +119,7 @@ if __name__ == "__main__":
     ###Result directory
     save_file = "./GP_SE/"
     
-    for bench_fun in [branin_rcos, six_hump_camel_back, goldstein_price, rosenbrock, hartman_6, Styblinski_Tang, Michalewicz]:
+    for bench_fun in [Styblinski_Tang, Michalewicz]:
         obj_fun = bench_fun()
 
         df_result = pd.DataFrame(
@@ -127,7 +133,7 @@ if __name__ == "__main__":
 
             #Initial Points given
             x = tf.random.uniform(
-                (1, obj_fun.dim),
+                (10, obj_fun.dim),
                 dtype=tf.dtypes.float64
             )
             x = x * (obj_fun.upper_bound -obj_fun.lower_bound) + obj_fun.lower_bound

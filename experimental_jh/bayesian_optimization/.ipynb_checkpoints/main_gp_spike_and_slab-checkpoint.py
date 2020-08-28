@@ -25,10 +25,9 @@ parser.add_argument('--show_plot', '-v', type = bool, default = True)
 
 ###This is argument for selector, but not used in baseline
 parser.add_argument('--selector', '-s',
-choices=["TrivialSelector", "SpikeAndSlabSelector", "HorseshoeSelector"],
+choices=["SpikeAndSlabSelector", "HorseshoeSelector"],
 help='''
 Selectors:
-TrivialSelector
 SpikeAndSlabSelector
 HorseshoeSelector
 ''', default = "HorseshoeSelector")
@@ -56,7 +55,7 @@ parser.add_argument('--num_trial', '-t', type = int, default = 200, help = "Numb
 parser.add_argument('--num_init', '-n', type = int, default = 10,
                     help = "Number of runs for each benchmark function to change intial points randomly.")
 parser.add_argument('--learning_rate', '-l', type = float, default = 0.01, help = "learning rate in Adam optimizer")
-parser.add_argument('--num_step', '-u', type = int, default = 10000, help = "number of steps in each BO iteration")
+parser.add_argument('--num_step', '-u', type = int, default = 1000, help = "number of steps in each BO iteration")
 
 args = parser.parse_args()
 #-------------------------argparse-------------------------
@@ -68,7 +67,7 @@ from utils import branin_rcos, six_hump_camel_back, goldstein_price, rosenbrock,
 exec("from utils import " + args.acq_fun)
 exec("acq_fun = " + args.acq_fun + "()")
 
-from src.sparse_selector_tf import HorseshoeSelector
+from src.sparse_selector_tf import SpikeAndSlabSelector
 from src.structural_sgp_tf import StructuralSVGP
 from src.kernel_generator_tf import Generator
 
@@ -154,7 +153,7 @@ if __name__ == "__main__":
                 gp = SVGP(kernel, likelihood=None, inducing_variable=inducing_point)
                 gps.append(gp)
                 
-            selector = HorseshoeSelector(dim=len(gps))
+            selector = SpikeAndSlabSelector(dim=len(gps), gumbel_temp=0.5)
             likelihood = Gaussian()
             model = StructuralSVGP(gps, selector, likelihood, n_inducing)
         
