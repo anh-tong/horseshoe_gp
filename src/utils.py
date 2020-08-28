@@ -208,15 +208,10 @@ def get_dataset(name) -> Dataset:
 
     return dataset
 
-
-def get_data_shape(dataset:ABCDDataset):
-
+def get_data_shape_from_XY(X, Y):
     data_shape = dict()
 
-    X, Y = dataset.get_train()
-    X, Y = X.numpy(), Y.numpy()
-
-    data_shape["init"] = np.ones(X.shape[1])
+    data_shape["n_dims"] = X.shape[1]
 
     data_shape["x_mean"] = np.mean(X, axis=0)
     data_shape["y_mean"] = np.mean(Y)
@@ -232,11 +227,11 @@ def get_data_shape(dataset:ABCDDataset):
         for i in x:
             for j in x:
                 if i != j:
-                    value = abs(i-j)
+                    value = abs(i - j)
                 else:
                     value = np.Inf
 
-                ret +=[value]
+                ret += [value]
         return min(ret)
 
     def min_abs_diff(X):
@@ -245,6 +240,15 @@ def get_data_shape(dataset:ABCDDataset):
         return value
 
     data_shape["x_min_abs_diff"] = np.log(min_abs_diff(X))
+
+    return data_shape
+
+def get_data_shape(dataset:ABCDDataset):
+
+    X, Y = dataset.get_train()
+    X, Y = X.numpy(), Y.numpy()
+
+    data_shape = get_data_shape_from_XY(X, Y)
 
     return data_shape
 

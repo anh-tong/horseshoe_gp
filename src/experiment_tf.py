@@ -1,17 +1,17 @@
+import logging
+
 import numpy as np
 import tensorflow as tf
-
-import gpflow
-from gpflow.kernels import RBF, Periodic, Linear, Product
-from gpflow.models import SVGP
-from gpflow.likelihoods import Gaussian
-from src.structural_sgp_tf import StructuralSVGP
-from src.sparse_selector_tf import HorseshoeSelector, SpikeAndSlabSelector
-from src.kernels import create_rbf, create_period
-from src.kernel_generator_tf import Generator
-from src.utils import get_dataset, get_data_shape
 from gpflow import set_trainable
-import logging
+from gpflow.kernels import Periodic, Product
+from gpflow.likelihoods import Gaussian
+from gpflow.models import SVGP
+
+from src.kernel_generator_tf import Generator
+from src.kernels import create_rbf, create_period, additive, create_se_per
+from src.sparse_selector_tf import HorseshoeSelector, SpikeAndSlabSelector
+from src.structural_sgp_tf import StructuralSVGP
+from src.utils import get_dataset, get_data_shape
 
 
 def load_data(name="airline"):
@@ -43,12 +43,16 @@ def fix_kernel_variance(kernels):
             set_trainable(kernel.variance, False)
 
 
-def create_model(inducing_point, data_shape, num_data, selector="horseshoe", kernel_order=2, repetition=2) -> StructuralSVGP:
-    generator = Generator(data_shape, base_fn=[create_rbf, create_period])
-    kernels = []
-    for _ in range(repetition):
-        kernels.extend(generator.create_upto(upto_order=kernel_order))
+def create_model(inducing_point, data_shape, num_data, selector="horseshoe", kernel_order=2,
+                 repetition=2) -> StructuralSVGP:
+    # generator = Generator(data_shape, base_fn=[create_rbf, create_period])
+    # kernels = []
+    # for _ in range(repetition):
+    #     kernels.extend(generator.create_upto(upto_order=kernel_order))
 
+    kernels = additive(create_se_per, data_shape=data_shape, num_active_dims_per_kernel=1)
+    kernels.extend(additive(create_se_per, data_shape=data_shape, num_active_dims_per_kernel=1))
+    print("NUMBER OF KERNELS: {}".format(len(kernels)))
     fix_kernel_variance(kernels)
     gps = []
     for kernel in kernels:
@@ -66,6 +70,7 @@ def create_model(inducing_point, data_shape, num_data, selector="horseshoe", ker
     model = StructuralSVGP(gps, selector, likelihood, num_data)
     return model
 
+
 def train_and_test(model,
                    train_iter,
                    x_test,
@@ -76,7 +81,6 @@ def train_and_test(model,
                    n_iter=10000,
                    lr=0.01,
                    logger=logging.getLogger("default")):
-
     optimizer = tf.optimizers.Adam(lr=lr)
     train_loss = model.training_loss_closure(train_iter)
     ckpt = tf.train.Checkpoint(model=model)
@@ -109,12 +113,12 @@ def train_and_test(model,
             RMSE = tf.sqrt(tf.reduce_mean(tf.square(mu - y_test))) * std_y_train
             logger.info("Saved checkpoint for step {}: {}".format(i + 1, save_path))
             logger.info("Iter {} \t Loss: {:.2f} \t Test RMSE:{} \t Test LL{}".format(i,
-                                                                                    train_loss().numpy(),
-                                                                                    RMSE.numpy(),
-                                                                                    ll.numpy()))
+                                                                                      train_loss().numpy(),
+                                                                                      RMSE.numpy(),
+                                                                                      ll.numpy()))
 
 
-def train(model, train_iter, ckpt_dir,ckpt_freq=1000, n_iter=10000, lr=0.01):
+def train(model, train_iter, ckpt_dir, ckpt_freq=1000, n_iter=10000, lr=0.01):
     optimizer = tf.optimizers.Adam(lr=lr)
 
     train_loss = model.training_loss_closure(train_iter)
@@ -148,8 +152,7 @@ def train(model, train_iter, ckpt_dir,ckpt_freq=1000, n_iter=10000, lr=0.01):
 
 
 def test_from_checkpoint(date, dataset_name, selector, kernel_order, repetition):
-
-    unique_name = create_unique_name(date,dataset_name, kernel_order, repetition, selector)
+    unique_name = create_unique_name(date, dataset_name, kernel_order, repetition, selector)
     ckpt_dir = "../model/{}".format(unique_name)
     dataset = load_data(dataset_name)
     x_train, y_train = dataset.get_train()
@@ -220,15 +223,16 @@ def plot(x, y, x_prime, y_prime, upper, lower):
     plt.fill_between(x_prime.squeeze(), lower.squeeze(), upper.squeeze(), alpha=0.2)
     plt.show()
 
+
 def run_train_and_test(date,
-        dataset_name,
-        selector="horseshoe",
-        kernel_order=2,
-        repetition=2,
-        n_iter=50000,
-        lr=0.01,
-        batch_size=128,
-        plot_n_predict=True,logger=logging.getLogger("default")
+                       dataset_name,
+                       selector="horseshoe",
+                       kernel_order=2,
+                       repetition=2,
+                       n_iter=50000,
+                       lr=0.01,
+                       batch_size=128,
+                       plot_n_predict=True, logger=logging.getLogger("default")
                        ):
     unique_name = create_unique_name(date, dataset_name, kernel_order, repetition, selector)
 
@@ -254,7 +258,8 @@ def run_train_and_test(date,
 
     # train
     ckpt_dir = "../model/{}".format(unique_name)
-    train_and_test(model, train_iter, x_test, y_test, dataset.std_y_train, ckpt_dir, n_iter=n_iter, lr=lr, logger=logger)
+    train_and_test(model, train_iter, x_test, y_test, dataset.std_y_train, ckpt_dir, n_iter=n_iter, lr=lr,
+                   logger=logger)
 
 
 def run(date,
@@ -267,8 +272,11 @@ def run(date,
         batch_size=128,
         plot_n_predict=True,
         ):
-
-    unique_name = create_unique_name(date,dataset_name, kernel_order, repetition, selector)
+    unique_name = create_unique_name(date,
+                                     dataset_name,
+                                     kernel_order,
+                                     repetition,
+                                     selector)
 
     # data
     dataset = load_data(dataset_name)
@@ -324,6 +332,5 @@ if __name__ == "__main__":
     # run(name="airline")
     # run(name="mauna")
     # run(name="wheat-price")
-
 
     test_from_checkpoint("airline")

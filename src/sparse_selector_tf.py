@@ -37,26 +37,14 @@ class LinearSelector(BaseSparseSelector):
 
     def __init__(self, dim):
         super().__init__(dim)
-        self.w = Parameter(tf.zeros((self.dim, 1)))
-        self.var = Parameter(tf.ones((self.dim, 1)), transform=positive())
+        self.w = Parameter(tf.random.normal((self.dim, 1)))
 
-        self.w2 = Parameter(tf.zeros((self.dim, 1)))
-        self.var2 = Parameter(tf.ones((self.dim, 1)), transform=positive())
 
     def kl_divergence(self):
-        import tensorflow_probability as tfp
-
-        q = tfp.distributions.Normal(loc=self.w, scale=tf.sqrt(self.var))
-        q2 = tfp.distributions.Normal(loc=self.w2, scale=tf.sqrt(self.var2))
-        p = tfp.distributions.Normal(loc=tf.zeros((self.dim, 1), dtype=tf.float64),
-                                     scale=tf.ones((self.dim, 1), dtype=tf.float64))
-        return tf.reduce_sum(tfp.distributions.kl_divergence(q, p)) +  tf.reduce_sum(tfp.distributions.kl_divergence(q2, p))
-        # return tf.zeros(1, dtype=tf.float64)
+        return tf.zeros(1, dtype=tf.float64)
 
     def sample(self):
-        w1 = self.w + tf.random.normal((self.dim, 1), dtype=tf.float64) * tf.sqrt(self.var)
-        w2 = self.w2 + tf.random.normal((self.dim, 1), dtype=tf.float64) * tf.sqrt(self.var2)
-        return w1*w2
+        return self.w
 
 class SpikeAndSlabSelector(BaseSparseSelector):
 
@@ -132,16 +120,6 @@ class HorseshoeSelector(BaseSparseSelector):
         self.q_phi_lambda = InverseGamma(shape=0.5 * tf.ones([self.dim, 1]),
                                          rate=tf.convert_to_tensor(B))
 
-        # w
-        self.m_w = Parameter(tf.random.normal([self.dim, 1]))
-        self.var_w = Parameter(tf.ones([self.dim, 1]),
-                               transform=positive())
-        self.q_w = Normal(mean=self.m_w,
-                          var=self.var_w)
-
-        # s2 for linear regression
-        self.s2 = Parameter(tf.ones((1, 1)),
-                            transform=positive())
 
     def entropy(self):
         entropy_tau = self.q_tau.entropy()
@@ -166,9 +144,7 @@ class HorseshoeSelector(BaseSparseSelector):
         return log_prior_tau + tf.reduce_sum(log_prior_lambda)
 
     def kl_divergence(self):
-        w_kl = self.q_w.kl_divergence()
-        w_kl = tf.reduce_sum(w_kl)
-        return w_kl - self.entropy() - self.log_prior()
+        return - self.entropy() - self.log_prior()
 
     def update_tau_lambda(self):
         new_tau_shape = tf.ones((1, 1))
@@ -183,8 +159,8 @@ class HorseshoeSelector(BaseSparseSelector):
         self.q_phi_lambda.update(new_lambda_shape, new_lambda_rate)
 
     def sample(self):
-        w = self.q_w.sample()
         mean = self.q_tau.mean + self.q_lambda.mean
         var = self.q_tau.var + self.q_lambda.var
         log_tau_lambda = mean + tf.sqrt(var) * tf.random.normal(shape=tf.shape(var), dtype=tf.float64)
-        return w * tf.exp(log_tau_lambda)
+        return tf.exp(0.5 * log_tau_lambda)
+
