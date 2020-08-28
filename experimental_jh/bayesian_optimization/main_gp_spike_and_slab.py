@@ -62,7 +62,7 @@ args = parser.parse_args()
 
 #exec("from utils import " + args.bench_fun)
 #exec("bench_fun = " + args.bench_fun)
-from utils import branin_rcos, six_hump_camel_back, goldstein_price, rosenbrock, hartman_6
+from utils import branin_rcos, six_hump_camel_back, goldstein_price, rosenbrock, hartman_6, Styblinski_Tang, Michalewicz
 
 exec("from utils import " + args.acq_fun)
 exec("acq_fun = " + args.acq_fun + "()")
@@ -108,9 +108,9 @@ def acq_max(lb, ub, sur_model, y_max, acq_fun, n_warmup = 10000, iteration = 10)
 if __name__ == "__main__":
     
     ###Result directory
-    save_file = "./GP_Horseshoe/"
+    save_file = "./GP_spike_and_slab/"
     
-    for bench_fun in [branin_rcos, six_hump_camel_back, goldstein_price, rosenbrock, hartman_6]:
+    for bench_fun in [branin_rcos, six_hump_camel_back, goldstein_price, rosenbrock, hartman_6, Styblinski_Tang, Michalewicz]:
         obj_fun = bench_fun()
 
         df_result = pd.DataFrame(
@@ -163,7 +163,6 @@ if __name__ == "__main__":
                     optimizer.minimize(
                         model.training_loss_closure((x, y)),
                         model.trainable_variables)
-                    model.selector.update_tau_lambda()
 
                 x_new = acq_max(
                     obj_fun.lower_bound,

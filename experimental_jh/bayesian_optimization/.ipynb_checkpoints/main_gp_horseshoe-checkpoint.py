@@ -12,6 +12,7 @@ from gpflow.kernels import RBF
 import tensorflow as tf
 tf.random.set_seed(2020)
 tf.get_logger().setLevel('ERROR')
+tf.autograph.set_verbosity(1)
 
 import numpy as np
 import pandas as pd
@@ -56,14 +57,14 @@ parser.add_argument('--num_trial', '-t', type = int, default = 200, help = "Numb
 parser.add_argument('--num_init', '-n', type = int, default = 10,
                     help = "Number of runs for each benchmark function to change intial points randomly.")
 parser.add_argument('--learning_rate', '-l', type = float, default = 0.01, help = "learning rate in Adam optimizer")
-parser.add_argument('--num_step', '-u', type = int, default = 10000, help = "number of steps in each BO iteration")
+parser.add_argument('--num_step', '-u', type = int, default = 1000, help = "number of steps in each BO iteration")
 
 args = parser.parse_args()
 #-------------------------argparse-------------------------
 
 #exec("from utils import " + args.bench_fun)
 #exec("bench_fun = " + args.bench_fun)
-from utils import branin_rcos, six_hump_camel_back, goldstein_price, rosenbrock, hartman_6
+from utils import branin_rcos, six_hump_camel_back, goldstein_price, rosenbrock, hartman_6,  Styblinski_Tang, Michalewicz
 
 exec("from utils import " + args.acq_fun)
 exec("acq_fun = " + args.acq_fun + "()")
@@ -111,7 +112,7 @@ if __name__ == "__main__":
     ###Result directory
     save_file = "./GP_Horseshoe/"
     
-    for bench_fun in [branin_rcos, six_hump_camel_back, goldstein_price, rosenbrock, hartman_6]:
+    for bench_fun in [branin_rcos, six_hump_camel_back, goldstein_price, rosenbrock, hartman_6, Styblinski_Tang, Michalewicz]:
         obj_fun = bench_fun()
 
         df_result = pd.DataFrame(
