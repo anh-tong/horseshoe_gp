@@ -10,22 +10,26 @@ pi = tf.constant(np.pi, dtype = tf.dtypes.float64)
 ###Acqusition Functions
 class UCB:
     def __init__(self):
-        self.kappa = 2.576
-        
-    def __call__(self, x, model, ymax = None):
-        mean, std = model.predict_f(x)
-        return tf.squeeze(mean + self.kappa * std)
-
-class EI:
-    def __init__(self):
-        self.eps = 0.01
         self.norm = tfp.distributions.Normal(
             tf.zeros(1, dtype=tf.dtypes.float64),
             tf.ones(1, dtype=tf.dtypes.float64))
         
-    def __call__(self, x, model, ymax):
-        mean, std = model.predict_f(x)
-        z = (mean - ymax - self.eps) / std
+    def __call__(self, x, model, num_fitted, ymax = None):
+        mean, var = model.predict_f(x)
+        #I put the value of 0.005 normal quantile
+        return tf.squeeze(mean + 2.807034 * tf.math.sqrt(var))
+        #return tf.squeeze(mean + self.norm.quantile(1 - 1 / num_fitted) * tf.math.sqrt(var))
+
+class EI:
+    def __init__(self):
+        self.norm = tfp.distributions.Normal(
+            tf.zeros(1, dtype=tf.dtypes.float64),
+            tf.ones(1, dtype=tf.dtypes.float64))
+        
+    def __call__(self, x, model, ymax, num_fitted):
+        mean, var = model.predict_f(x)
+        std = tf.sqrt(var)
+        z = (mean - ymax - 1/num_fitted) / std
         return tf.squeeze(std * (z * self.norm.cdf(z) + self.norm.prob(z)))
 
 class POI:
@@ -35,9 +39,9 @@ class POI:
             tf.zeros(1,  dtype=tf.dtypes.float64),
             tf.ones(1,  dtype=tf.dtypes.float64))
         
-    def __call__(self, x, model, ymax):
-        mean, std = model.predict_y(x)        
-        z = (mean - ymax - self.eps)/std
+    def __call__(self, x, model, ymax, num_fitted):
+        mean, var = model.predict_f(x)        
+        z = (mean - ymax -1/num_fitted)/tf.sqrt(var)
         return tf.squeeze(self.norm.cdf(z))
 
 ###Test Functions

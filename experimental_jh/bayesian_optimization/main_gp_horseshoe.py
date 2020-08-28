@@ -1,3 +1,6 @@
+import os
+os.environ['TF_CPP_MIN_LOG_LEVEL'] = '3' 
+
 import sys
 sys.path.append("../..")
 
@@ -7,6 +10,7 @@ from gpflow.optimizers import NaturalGradient
 from gpflow.models import SVGP, BayesianModel
 from gpflow.likelihoods import Gaussian
 from gpflow.kernels import RBF
+
 #from gpflow.mean_functions import Zero
 
 import tensorflow as tf
@@ -57,7 +61,7 @@ parser.add_argument('--num_trial', '-t', type = int, default = 200, help = "Numb
 parser.add_argument('--num_init', '-n', type = int, default = 10,
                     help = "Number of runs for each benchmark function to change intial points randomly.")
 parser.add_argument('--learning_rate', '-l', type = float, default = 0.01, help = "learning rate in Adam optimizer")
-parser.add_argument('--num_step', '-u', type = int, default = 1000, help = "number of steps in each BO iteration")
+parser.add_argument('--num_step', '-u', type = int, default = 100, help = "number of steps in each BO iteration")
 
 args = parser.parse_args()
 #-------------------------argparse-------------------------
@@ -73,11 +77,15 @@ from src.sparse_selector_tf import HorseshoeSelector
 from src.structural_sgp_tf import StructuralSVGP
 from src.kernel_generator_tf import Generator
 
-def acq_max(lb, ub, sur_model, y_max, acq_fun, n_warmup = 10000, iteration = 10):
+def acq_max(lb, ub, sur_model, num_fitted, y_max, acq_fun, n_warmup = 10000, iteration = 10):
     x_tries = tf.random.uniform(
         [n_warmup, obj_fun.dim],
         dtype=tf.dtypes.float64) * (ub - lb) + lb
-    ys = acq_fun(x_tries, sur_model, y_max)
+    ys = acq_fun(
+        x = x_tries,
+        model = sur_model,
+        num_fitted = num_fitted,
+        ymax = y_max)
     x_max = tf.expand_dims(x_tries[tf.squeeze(tf.argmax(ys))], 0)
     max_acq = tf.reduce_max(ys)
     
@@ -92,12 +100,20 @@ def acq_max(lb, ub, sur_model, y_max, acq_fun, n_warmup = 10000, iteration = 10)
         
         optimizer = tf.keras.optimizers.Adam()
         optimizer.minimize(
-            lambda: -acq_fun(tf.clip_by_value(tf.reshape(var_locs, (1, -1)), lb, ub), sur_model, y_max),
+            lambda: -acq_fun(
+                x = tf.clip_by_value(tf.reshape(var_locs, (1, -1)), lb, ub),
+                model = sur_model,
+                num_fitted=num_fitted,
+                ymax = y_max),
             [var_locs]
         )
         
         loc_res = var_locs
-        obj_res = acq_fun(tf.clip_by_value(tf.reshape(loc_res, (1, -1)), lb, ub), sur_model, y_max)
+        obj_res = acq_fun(
+            x = tf.clip_by_value(tf.reshape(loc_res, (1, -1)), lb, ub),
+            model=sur_model,
+            num_fitted=num_fitted,
+            ymax=y_max)
 
         if max_acq is None or obj_res >= max_acq:
             x_max = loc_res
@@ -112,7 +128,7 @@ if __name__ == "__main__":
     ###Result directory
     save_file = "./GP_Horseshoe/"
     
-    for bench_fun in [branin_rcos, six_hump_camel_back, goldstein_price, rosenbrock, hartman_6, Styblinski_Tang, Michalewicz]:
+    for bench_fun in [branin_rcos, six_hump_camel_back, goldstein_price, rosenbrock]:
         obj_fun = bench_fun()
 
         df_result = pd.DataFrame(
@@ -160,17 +176,23 @@ if __name__ == "__main__":
             model = StructuralSVGP(gps, selector, likelihood, n_inducing)
         
             #Bayesian Optimization iteration
-            for tries in range(args.num_trial):                        
-                for step in range(args.num_step):
+            for tries in range(args.num_trial):      
+
+                @tf.function
+                def optimize_step():
                     optimizer.minimize(
                         model.training_loss_closure((x, y)),
                         model.trainable_variables)
+                    
+                for step in range(args.num_step):
+                    optimize_step()
                     model.selector.update_tau_lambda()
 
                 x_new = acq_max(
                     obj_fun.lower_bound,
                     obj_fun.upper_bound,
                     model,
+                    11 + tries,
                     tf.reduce_max(y),
                     acq_fun)
 

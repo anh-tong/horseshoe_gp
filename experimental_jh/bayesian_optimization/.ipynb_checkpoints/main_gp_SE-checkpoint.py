@@ -1,3 +1,6 @@
+import os
+os.environ['TF_CPP_MIN_LOG_LEVEL'] = '3' 
+
 import sys
 sys.path.append("../..")
 
@@ -79,13 +82,17 @@ def create_rbf(x):
         lengthscales = tf.math.exp(lengthscales)
     return SquaredExponential(lengthscales=lengthscales)
 
-def acq_max(lb, ub, sur_model, y_max, acq_fun, n_warmup = 10000, iteration = 10):
+def acq_max(lb, ub, sur_model, num_fitted, y_max, acq_fun, n_warmup = 10000, iteration = 10):
     bounds = Bounds(lb, ub)
     
     x_tries = tf.random.uniform(
         [n_warmup, obj_fun.dim],
         dtype=tf.dtypes.float64) * (ub - lb) + lb
-    ys = acq_fun(x_tries, sur_model, y_max)
+    ys = acq_fun(
+        x = x_tries,
+        model = sur_model,
+        num_fitted = num_fitted,
+        ymax = y_max)
     x_max = tf.expand_dims(x_tries[tf.squeeze(tf.argmax(ys))], 0)
     max_acq = tf.reduce_max(ys)
     
@@ -98,7 +105,11 @@ def acq_max(lb, ub, sur_model, y_max, acq_fun, n_warmup = 10000, iteration = 10)
             dtype=tf.dtypes.float64) * (ub - lb) + lb
         
         opt_result = minimize(
-            lambda x: -acq_fun(tf.reshape(locs, (1, -1)), sur_model, y_max).numpy(),
+            lambda x: -acq_fun(
+                x = tf.reshape(locs, (1, -1)),
+                model = sur_model,
+                num_fitted = num_fitted,
+                ymax = y_max).numpy(),
             locs,
             bounds=bounds,
             method="L-BFGS-B")
@@ -119,7 +130,7 @@ if __name__ == "__main__":
     ###Result directory
     save_file = "./GP_SE/"
     
-    for bench_fun in [Styblinski_Tang, Michalewicz]:
+    for bench_fun in [branin_rcos, six_hump_camel_back, goldstein_price, rosenbrock, hartman_6, Styblinski_Tang, Michalewicz]:
         obj_fun = bench_fun()
 
         df_result = pd.DataFrame(
@@ -165,6 +176,7 @@ if __name__ == "__main__":
                     obj_fun.lower_bound,
                     obj_fun.upper_bound,
                     model,
+                    11 + tries,
                     tf.reduce_max(y),
                     acq_fun)
 

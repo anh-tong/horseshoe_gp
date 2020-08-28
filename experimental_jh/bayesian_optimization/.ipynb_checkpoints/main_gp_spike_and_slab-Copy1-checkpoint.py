@@ -6,7 +6,11 @@ sys.path.append("../..")
 
 
 import gpflow
-from gpflow.kernels import SquaredExponential
+from gpflow.optimizers import NaturalGradient
+from gpflow.models import SVGP, BayesianModel
+from gpflow.likelihoods import Gaussian
+from gpflow.kernels import RBF
+#from gpflow.mean_functions import Zero
 
 import tensorflow as tf
 tf.random.set_seed(2020)
@@ -15,7 +19,6 @@ tf.get_logger().setLevel('ERROR')
 import numpy as np
 import pandas as pd
 
-from scipy.optimize import Bounds, minimize
 
 #-------------------------argparse-------------------------
 import argparse
@@ -25,17 +28,16 @@ parser.add_argument('--show_plot', '-v', type = bool, default = True)
 
 ###This is argument for selector, but not used in baseline
 parser.add_argument('--selector', '-s',
-choices=["TrivialSelector", "SpikeAndSlabSelector", "HorseshoeSelector"],
+choices=["SpikeAndSlabSelector", "HorseshoeSelector"],
 help='''
 Selectors:
-TrivialSelector
 SpikeAndSlabSelector
 HorseshoeSelector
 ''', default = "HorseshoeSelector")
 
 ###This parts is not used in Baseline
 parser.add_argument('--num_inducing', '-i', type = int, default = 10)
-parser.add_argument('--n_kernels', '-k', type = int, default = 5)
+parser.add_argument('--n_kernels', '-k', type = int, default = 2)
 
 """
 parser.add_argument('--bench_fun', '-b',
@@ -55,9 +57,8 @@ parser.add_argument('--num_trial', '-t', type = int, default = 200, help = "Numb
 
 parser.add_argument('--num_init', '-n', type = int, default = 10,
                     help = "Number of runs for each benchmark function to change intial points randomly.")
-parser.add_argument('--learning_rate', '-l', type = float, default = 3e-4, help = "learning rate in Adam optimizer")
-parser.add_argument('--noise_level', '-e', type = float, default = 0.01, help = "Noise in function evaluation")
-
+parser.add_argument('--learning_rate', '-l', type = float, default = 0.01, help = "learning rate in Adam optimizer")
+parser.add_argument('--num_step', '-u', type = int, default = 100, help = "number of steps in each BO iteration")
 
 args = parser.parse_args()
 #-------------------------argparse-------------------------
@@ -69,22 +70,11 @@ from utils import branin_rcos, six_hump_camel_back, goldstein_price, rosenbrock,
 exec("from utils import " + args.acq_fun)
 exec("acq_fun = " + args.acq_fun + "()")
 
-def create_rbf(x):
-    r = np.random.rand()
-    if r < 0.5:
-        lengthscales = tf.random.normal(
-            [1, x.shape[1]], mean=0., stddev=1., dtype=tf.dtypes.float64) + tf.math.reduce_std(x, axis=0)
-        lengthscales = tf.math.exp(lengthscales)
-    else:
-        dist = tf.reduce_max(x, axis = 0) - tf.reduce_min(x, axis = 0)
-        lengthscales = tf.random.normal(
-            [1, x.shape[1]], mean=tf.math.log(2 * dist), stddev=1.0, dtype=tf.dtypes.float64)
-        lengthscales = tf.math.exp(lengthscales)
-    return SquaredExponential(lengthscales=lengthscales)
+from src.sparse_selector_tf import SpikeAndSlabSelector
+from src.structural_sgp_tf import StructuralSVGP
+from src.kernel_generator_tf import Generator
 
 def acq_max(lb, ub, sur_model, num_fitted, y_max, acq_fun, n_warmup = 10000, iteration = 10):
-    bounds = Bounds(lb, ub)
-    
     x_tries = tf.random.uniform(
         [n_warmup, obj_fun.dim],
         dtype=tf.dtypes.float64) * (ub - lb) + lb
@@ -103,45 +93,48 @@ def acq_max(lb, ub, sur_model, num_fitted, y_max, acq_fun, n_warmup = 10000, ite
         locs = tf.random.uniform(
             [1, obj_fun.dim],
             dtype=tf.dtypes.float64) * (ub - lb) + lb
+        var_locs = tf.Variable(locs)
         
-        opt_result = minimize(
-            lambda x: -acq_fun(
-                x = tf.reshape(locs, (1, -1)),
+        optimizer = tf.keras.optimizers.Adam()
+        optimizer.minimize(
+            lambda: -acq_fun(
+                x = tf.clip_by_value(tf.reshape(var_locs, (1, -1)), lb, ub),
                 model = sur_model,
                 num_fitted = num_fitted,
-                ymax = y_max).numpy(),
-            locs,
-            bounds=bounds,
-            method="L-BFGS-B")
+                ymax = y_max),
+            [var_locs]
+        )
         
-        if not opt_result.success:
-            continue
+        loc_res = var_locs
+        obj_res = acq_fun(
+            x = tf.clip_by_value(tf.reshape(loc_res, (1, -1)), lb, ub),
+            model = sur_model,
+            num_fitted = num_fitted,
+            ymax = y_max)
 
-        if max_acq is None or -opt_result.fun >= max_acq:
-            x_max = tf.expand_dims(opt_result.x, 0)
-            max_acq = -opt_result.fun
+        if max_acq is None or obj_res >= max_acq:
+            x_max = loc_res
+            max_acq = obj_res
             
-    return tf.clip_by_value(x_max, lb, ub)
+    return x_max
 
 
 #main
 if __name__ == "__main__":
     
     ###Result directory
-    save_file = "./GP_SE/"
+    save_file = "./GP_spike_and_slab/"
     
-    for bench_fun in [branin_rcos, six_hump_camel_back, goldstein_price, rosenbrock, hartman_6, Styblinski_Tang, Michalewicz]:
+    for bench_fun in [hartman_6, Styblinski_Tang, Michalewicz]:
         obj_fun = bench_fun()
 
         df_result = pd.DataFrame(
             0,
             index=range(args.num_trial+1),
-            columns=range(args.num_init))
+            columns=range(args.num_init))  
 
         num_test = 0
         while num_test < args.num_init:
-            ###n_inducing = args.num_inducing
-
             #Initial Points given
             x = tf.random.uniform(
                 (10, obj_fun.dim),
@@ -149,29 +142,47 @@ if __name__ == "__main__":
             )
             x = x * (obj_fun.upper_bound -obj_fun.lower_bound) + obj_fun.lower_bound
             y = tf.expand_dims(obj_fun(x), 1)
-            y = y + tf.random.normal(
-                y.shape, mean = 0.0, stddev = args.noise_level, dtype=tf.dtypes.float64)
 
             y_start = tf.reduce_min(y, axis=0).numpy()
 
             df_result.loc[0, num_test] = y_start
 
-            #Initiali Training
-            #optimizer = gpflow.optimizers.Scipy()
-            optimizer = tf.keras.optimizers.Adam()
+            ###number of inducing variables
+            n_inducing = args.num_inducing
+            inducing_point = tf.random.uniform(
+                (10, obj_fun.dim),
+                dtype=tf.dtypes.float64
+            )
+
+            #Initialize Optimizer
+            optimizer = tf.optimizers.Adam(
+                learning_rate=args.learning_rate)
             
             ###model
-            model = gpflow.models.GPR(
-                data=(x, y),
-                kernel=create_rbf(x),
-                mean_function=None)
-
-            optimizer.minimize(
-                model.training_loss,
-                model.trainable_variables)
-
+            generator = Generator()
+            kernels = generator.create_upto(args.n_kernels)
+            #kernels = [RBF(), Periodic2(), Product([RBF(), Periodic2()])] * args.n_kernels
+            
+            gps = []
+            for kernel in kernels:
+                gp = SVGP(kernel, likelihood=None, inducing_variable=inducing_point)
+                gps.append(gp)
+                
+            selector = SpikeAndSlabSelector(dim=len(gps), gumbel_temp=0.5)
+            likelihood = Gaussian()
+            model = StructuralSVGP(gps, selector, likelihood, n_inducing)
+        
             #Bayesian Optimization iteration
             for tries in range(args.num_trial):
+                @tf.function
+                def optimize_step():
+                    optimizer.minimize(
+                        model.training_loss_closure((x, y)),
+                        model.trainable_variables)
+                
+                for step in range(args.num_step):
+                    optimize_step()
+
                 x_new = acq_max(
                     obj_fun.lower_bound,
                     obj_fun.upper_bound,
@@ -182,22 +193,10 @@ if __name__ == "__main__":
 
                 #Evaluation of new points
                 y_new = tf.expand_dims(obj_fun(x_new), 1)
-                y_new = y_new + tf.random.normal(
-                    y_new.shape, mean = 0.0, stddev = args.noise_level, dtype=tf.dtypes.float64)
 
                 x = tf.concat([x, x_new], 0)
                 y = tf.concat([y, y_new], 0)
-
-                ###model initialization again
-                model = gpflow.models.GPR(
-                    data=(x, y),
-                    kernel=gpflow.kernels.SquaredExponential(),
-                    mean_function=None)
-
-                optimizer.minimize(
-                    model.training_loss,
-                    model.trainable_variables)
-
+                
                 #Result
                 y_end = tf.reduce_min(y, axis=0).numpy()
                 df_result.loc[tries + 1, num_test] = y_end
