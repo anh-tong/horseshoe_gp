@@ -2,10 +2,55 @@ import numpy as np
 import tensorflow as tf
 import tensorflow_probability as tfp
 
+from gpflow.kernels import SquaredExponential, Product, Periodic 
+
 ###Benchmark Black-Box Funtions
 #https://arxiv.org/pdf/1308.4008.pdf
 
 pi = tf.constant(np.pi, dtype = tf.dtypes.float64)
+
+###Creating kernels
+def create_rbf(x, sd = 1., active_dims=None):
+    r = np.random.rand()
+    if r < 0.5:
+        lengthscales = tf.random.normal(
+            [1, x.shape[1]], mean=0., stddev=sd, dtype=tf.dtypes.float64) + tf.math.reduce_std(x, axis=0)
+        lengthscales = tf.math.exp(lengthscales)
+    else:
+        dist = tf.reduce_max(x, axis = 0) - tf.reduce_min(x, axis = 0)
+        lengthscales = tf.random.normal(
+            [1, x.shape[1]], mean=tf.math.log(2 * dist), stddev=sd, dtype=tf.dtypes.float64)
+        lengthscales = tf.math.exp(lengthscales)
+    return SquaredExponential(lengthscales=lengthscales, active_dims=active_dims)
+
+def create_period(x, sd = 1., active_dims=None):
+    base_kernel = create_rbf(x, active_dims=active_dims)
+    r = np.random.rand()
+    if r < 0.33:
+        value = tf.math.reduce_std(x, axis = 0) - 2.
+        period = tf.random.normal(
+            [1, x.shape[1]], mean=value, stddev=sd, dtype=tf.dtypes.float64)
+        period = tf.math.exp(period)
+    elif r < 0.5:
+        dist = tf.reduce_max(x, axis = 0) - tf.reduce_min(x, axis = 0)
+        period = tf.random.normal(
+            [1, x.shape[1]], mean=tf.math.log(dist) - 3.2, stddev=sd, dtype=tf.dtypes.float64)
+        period = tf.math.exp(period)
+    else:
+        ranked = tf.sort(x, axis = -1)
+        x_min_abs_diff = ranked[0, :] - ranked[1, :]
+        period = tf.random.normal(
+            [1, x.shape[1]], mean=x_min_abs_diff + 3.2, stddev=sd, dtype=tf.dtypes.float64)
+        period = tf.math.exp(period)
+        
+    return Periodic(base_kernel, period=period)
+
+def create_se_per(x, sd = 1., active_dims=None):
+
+    se = create_rbf(x, sd, active_dims)
+    per = create_period(x, sd, active_dims)
+    return Product([se, per])
+
 
 ###Acqusition Functions
 class UCB:

@@ -69,18 +69,8 @@ from utils import branin_rcos, six_hump_camel_back, goldstein_price, rosenbrock,
 exec("from utils import " + args.acq_fun)
 exec("acq_fun = " + args.acq_fun + "()")
 
-def create_rbf(x):
-    r = np.random.rand()
-    if r < 0.5:
-        lengthscales = tf.random.normal(
-            [1, x.shape[1]], mean=0., stddev=1., dtype=tf.dtypes.float64) + tf.math.reduce_std(x, axis=0)
-        lengthscales = tf.math.exp(lengthscales)
-    else:
-        dist = tf.reduce_max(x, axis = 0) - tf.reduce_min(x, axis = 0)
-        lengthscales = tf.random.normal(
-            [1, x.shape[1]], mean=tf.math.log(2 * dist), stddev=1.0, dtype=tf.dtypes.float64)
-        lengthscales = tf.math.exp(lengthscales)
-    return SquaredExponential(lengthscales=lengthscales)
+from utils import create_rbf
+
 
 def acq_max(lb, ub, sur_model, num_fitted, y_max, acq_fun, n_warmup = 10000, iteration = 10):
     bounds = Bounds(lb, ub)
