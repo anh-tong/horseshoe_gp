@@ -27,11 +27,10 @@ class UCB:
             tf.zeros(1, dtype=tf.dtypes.float64),
             tf.ones(1, dtype=tf.dtypes.float64))
         
-    def __call__(self, x, model, num_fitted, ymax = None):
+    def __call__(self, x, model, ymax = None):
         mean, var = model.predict_f(x)
         #I put the value of 0.005 normal quantile
         return tf.squeeze(mean + 2.807034 * tf.math.sqrt(var))
-        #return tf.squeeze(mean + self.norm.quantile(1 - 1 / num_fitted) * tf.math.sqrt(var))
 
 class EI:
     def __init__(self):
@@ -39,22 +38,21 @@ class EI:
             tf.zeros(1, dtype=tf.dtypes.float64),
             tf.ones(1, dtype=tf.dtypes.float64))
         
-    def __call__(self, x, model, ymax, num_fitted):
+    def __call__(self, x, model, ymax):
         mean, var = model.predict_f(x)
         std = tf.sqrt(var)
-        z = (mean - ymax - 1/num_fitted) / std
+        z = (mean - ymax - 0.01) / std
         return tf.squeeze(std * (z * self.norm.cdf(z) + self.norm.prob(z)))
 
 class POI:
     def __init__(self):
-        self.eps = 0.01
         self.norm = tfp.distributions.Normal(
             tf.zeros(1,  dtype=tf.dtypes.float64),
             tf.ones(1,  dtype=tf.dtypes.float64))
         
-    def __call__(self, x, model, ymax, num_fitted):
+    def __call__(self, x, model, ymax):
         mean, var = model.predict_f(x)        
-        z = (mean - ymax -1/num_fitted)/tf.sqrt(var)
+        z = (mean - ymax -0.01)/tf.sqrt(var)
         return tf.squeeze(self.norm.cdf(z))
 
 ###Test Functions

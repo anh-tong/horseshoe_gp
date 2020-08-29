@@ -67,7 +67,7 @@ from utils import branin_rcos, six_hump_camel_back, goldstein_price, rosenbrock,
 exec("from utils import " + args.acq_fun)
 exec("acq_fun = " + args.acq_fun + "()")
 
-def acq_max(lb, ub, sur_model, num_fitted, y_max, acq_fun, n_warmup = 10000, iteration = 10):
+def acq_max(lb, ub, sur_model, y_max, acq_fun, n_warmup = 10000, iteration = 10):
     bounds = Bounds(lb, ub)
     
     x_tries = tf.random.uniform(
@@ -76,7 +76,6 @@ def acq_max(lb, ub, sur_model, num_fitted, y_max, acq_fun, n_warmup = 10000, ite
     ys = acq_fun(
         x = x_tries,
         model = sur_model,
-        num_fitted = num_fitted,
         ymax = y_max)
     x_max = tf.expand_dims(x_tries[tf.squeeze(tf.argmax(ys))], 0)
     max_acq = tf.reduce_max(ys)
@@ -93,7 +92,6 @@ def acq_max(lb, ub, sur_model, num_fitted, y_max, acq_fun, n_warmup = 10000, ite
             lambda x: -acq_fun(
                 x = tf.reshape(locs, (1, -1)),
                 model = sur_model,
-                num_fitted = num_fitted,
                 ymax = y_max).numpy(),
             locs,
             bounds=bounds,
@@ -161,7 +159,6 @@ if __name__ == "__main__":
                     obj_fun.lower_bound,
                     obj_fun.upper_bound,
                     model,
-                    11 + tries,
                     tf.reduce_max(y),
                     acq_fun)
 

@@ -79,14 +79,13 @@ from src.structural_sgp_tf import StructuralSVGP
 from utils import get_data_shape
 from src.kernels import create_rbf, create_se_per
 
-def acq_max(lb, ub, sur_model, num_fitted, y_max, acq_fun, n_warmup = 10000, iteration = 10):
+def acq_max(lb, ub, sur_model, y_max, acq_fun, n_warmup = 10000, iteration = 10):
     x_tries = tf.random.uniform(
         [n_warmup, obj_fun.dim],
         dtype=tf.dtypes.float64) * (ub - lb) + lb
     ys = acq_fun(
         x = x_tries,
         model = sur_model,
-        num_fitted = num_fitted,
         ymax = y_max)
     x_max = tf.expand_dims(x_tries[tf.squeeze(tf.argmax(ys))], 0)
     max_acq = tf.reduce_max(ys)
@@ -105,7 +104,6 @@ def acq_max(lb, ub, sur_model, num_fitted, y_max, acq_fun, n_warmup = 10000, ite
             lambda: -acq_fun(
                 x = tf.clip_by_value(tf.reshape(var_locs, (1, -1)), lb, ub),
                 model = sur_model,
-                num_fitted=num_fitted,
                 ymax = y_max),
             [var_locs]
         )
@@ -114,7 +112,6 @@ def acq_max(lb, ub, sur_model, num_fitted, y_max, acq_fun, n_warmup = 10000, ite
         obj_res = acq_fun(
             x = tf.clip_by_value(tf.reshape(loc_res, (1, -1)), lb, ub),
             model=sur_model,
-            num_fitted=num_fitted,
             ymax=y_max)
 
         if max_acq is None or obj_res >= max_acq:
@@ -193,7 +190,6 @@ if __name__ == "__main__":
                     obj_fun.lower_bound,
                     obj_fun.upper_bound,
                     model,
-                    11 + tries,
                     tf.reduce_max(y),
                     acq_fun)
 

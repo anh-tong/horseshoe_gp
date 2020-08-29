@@ -53,7 +53,7 @@ POI: Probability of Improvement
 
 parser.add_argument('--num_trial', '-t', type = int, default = 200, help = "Number of Bayesian Optimization Interations")
 
-parser.add_argument('--num_init', '-n', type = int, default = 10,
+parser.add_argument('--num_init', '-n', type = int, default = 1,
                     help = "Number of runs for each benchmark function to change intial points randomly.")
 parser.add_argument('--learning_rate', '-l', type = float, default = 3e-4, help = "learning rate in Adam optimizer")
 parser.add_argument('--noise_level', '-e', type = float, default = 0.01, help = "Noise in function evaluation")
@@ -72,7 +72,7 @@ exec("acq_fun = " + args.acq_fun + "()")
 from utils import create_rbf
 
 
-def acq_max(lb, ub, sur_model, num_fitted, y_max, acq_fun, n_warmup = 10000, iteration = 10):
+def acq_max(lb, ub, sur_model, y_max, acq_fun, n_warmup = 10000, iteration = 10):
     bounds = Bounds(lb, ub)
     
     x_tries = tf.random.uniform(
@@ -81,8 +81,8 @@ def acq_max(lb, ub, sur_model, num_fitted, y_max, acq_fun, n_warmup = 10000, ite
     ys = acq_fun(
         x = x_tries,
         model = sur_model,
-        num_fitted = num_fitted,
         ymax = y_max)
+    print(ys.shape)
     x_max = tf.expand_dims(x_tries[tf.squeeze(tf.argmax(ys))], 0)
     max_acq = tf.reduce_max(ys)
     
@@ -98,7 +98,6 @@ def acq_max(lb, ub, sur_model, num_fitted, y_max, acq_fun, n_warmup = 10000, ite
             lambda x: -acq_fun(
                 x = tf.reshape(locs, (1, -1)),
                 model = sur_model,
-                num_fitted = num_fitted,
                 ymax = y_max).numpy(),
             locs,
             bounds=bounds,
@@ -118,15 +117,9 @@ def acq_max(lb, ub, sur_model, num_fitted, y_max, acq_fun, n_warmup = 10000, ite
 if __name__ == "__main__":
     
     ###Result directory
-    save_file = "./GP_SE/"
-    
+
     for bench_fun in [branin_rcos, six_hump_camel_back, goldstein_price, rosenbrock, hartman_6, Styblinski_Tang, Michalewicz]:
         obj_fun = bench_fun()
-
-        df_result = pd.DataFrame(
-            0,
-            index=range(args.num_trial+1),
-            columns=range(args.num_init))
 
         num_test = 0
         while num_test < args.num_init:
@@ -139,12 +132,10 @@ if __name__ == "__main__":
             )
             x = x * (obj_fun.upper_bound -obj_fun.lower_bound) + obj_fun.lower_bound
             y = tf.expand_dims(obj_fun(x), 1)
-            y = y + tf.random.normal(
-                y.shape, mean = 0.0, stddev = args.noise_level, dtype=tf.dtypes.float64)
 
             y_start = tf.reduce_min(y, axis=0).numpy()
 
-            df_result.loc[0, num_test] = y_start
+            print(y_start)
 
             #Initiali Training
             #optimizer = gpflow.optimizers.Scipy()
@@ -153,7 +144,7 @@ if __name__ == "__main__":
             ###model
             model = gpflow.models.GPR(
                 data=(x, y),
-                kernel=create_rbf(x),
+                kernel=create_rbf(get_data_shape(x)),
                 mean_function=None)
 
             optimizer.minimize(
