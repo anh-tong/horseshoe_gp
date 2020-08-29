@@ -69,13 +69,15 @@ args = parser.parse_args()
 #exec("from utils import " + args.bench_fun)
 #exec("bench_fun = " + args.bench_fun)
 from utils import branin_rcos, six_hump_camel_back, goldstein_price, rosenbrock, hartman_6,  Styblinski_Tang, Michalewicz
-from utils import create_rbf, create_se_per
 
 exec("from utils import " + args.acq_fun)
 exec("acq_fun = " + args.acq_fun + "()")
 
 from src.sparse_selector_tf import HorseshoeSelector
 from src.structural_sgp_tf import StructuralSVGP
+
+from utils import get_data_shape
+from src.kernels import create_rbf, create_se_per
 
 def acq_max(lb, ub, sur_model, num_fitted, y_max, acq_fun, n_warmup = 10000, iteration = 10):
     x_tries = tf.random.uniform(
@@ -162,7 +164,8 @@ if __name__ == "__main__":
                 learning_rate=args.learning_rate)
             
             ###model
-            kernels = [create_rbf(x), Product([create_rbf(x), create_se_per(x)])] * args.n_kernels
+            data_shape = get_data_shape(x)
+            kernels = [create_rbf(data_shape), create_se_per(data_shape)] * args.n_kernels
             
             gps = []
             for kernel in kernels:

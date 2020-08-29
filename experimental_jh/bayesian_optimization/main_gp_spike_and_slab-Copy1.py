@@ -74,6 +74,8 @@ from src.sparse_selector_tf import SpikeAndSlabSelector
 from src.structural_sgp_tf import StructuralSVGP
 from src.kernel_generator_tf import Generator
 
+from utils import get_data_shape
+
 def acq_max(lb, ub, sur_model, num_fitted, y_max, acq_fun, n_warmup = 10000, iteration = 10):
     x_tries = tf.random.uniform(
         [n_warmup, obj_fun.dim],
@@ -159,7 +161,7 @@ if __name__ == "__main__":
                 learning_rate=args.learning_rate)
             
             ###model
-            generator = Generator()
+            generator = Generator(get_data_shape(x))
             kernels = generator.create_upto(args.n_kernels)
             #kernels = [RBF(), Periodic2(), Product([RBF(), Periodic2()])] * args.n_kernels
             
