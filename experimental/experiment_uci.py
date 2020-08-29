@@ -18,7 +18,7 @@ if __name__ == "__main__":
     logger = create_logger("../log", unique_name, __file__)
 
     run_train_and_test(date, dataset_name, selector=selector, kernel_order=kernel_order, repetition=repetition,
-                       plot_n_predict=False, logger=logger)
+                       logger=logger)
 
 # test from check point
 # test_from_checkpoint(date, dataset_name, selector, kernel_order, repetition)

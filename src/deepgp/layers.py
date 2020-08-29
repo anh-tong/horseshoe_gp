@@ -25,7 +25,8 @@ class Layer(Module):
             mean, var = tf.map_fn(f, X, dtype=(tf.float64, tf.float64))
             return tf.stack(mean), tf.stack(var)
         else:
-            S, N, D = X.shape[:3]
+            X_shape = tf.shape(X)[:3]
+            S, N, D = X_shape[0], X_shape[1], X_shape[2]
             X_flat = tf.reshape(X, [S*N, D])
             mean, var = self.conditional_ND(X_flat)
             num_outputs = mean.shape[-1]
