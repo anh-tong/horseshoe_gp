@@ -45,13 +45,15 @@ def fix_kernel_variance(kernels):
 
 def create_model(inducing_point, data_shape, num_data, selector="horseshoe", kernel_order=2,
                  repetition=2) -> StructuralSVGP:
-    # generator = Generator(data_shape, base_fn=[create_rbf, create_period])
-    # kernels = []
-    # for _ in range(repetition):
-    #     kernels.extend(generator.create_upto(upto_order=kernel_order))
+    generator = Generator(data_shape
+                          #, base_fn=[create_rbf, create_period]
+                          )
+    kernels = []
+    for _ in range(repetition):
+        kernels.extend(generator.create_upto(upto_order=kernel_order))
 
-    kernels = additive(create_se_per, data_shape=data_shape, num_active_dims_per_kernel=1)
-    kernels.extend(additive(create_se_per, data_shape=data_shape, num_active_dims_per_kernel=1))
+#    kernels = additive(create_se_per, data_shape=data_shape, num_active_dims_per_kernel=1)
+#    kernels.extend(additive(create_se_per, data_shape=data_shape, num_active_dims_per_kernel=1))
     print("NUMBER OF KERNELS: {}".format(len(kernels)))
     fix_kernel_variance(kernels)
     gps = []
@@ -103,8 +105,9 @@ def train_and_test(model,
         # optimizer step
         optimize_step()
         # horseshoe update
-        # if isinstance(model.selector, HorseshoeSelector):
-        #     model.selector.update_tau_lambda()
+        if isinstance(model.selector, HorseshoeSelector):
+            model.selector.update_tau_lambda()
+
         # save checkpoint
         if (i + 1) % ckpt_feq == 0:
             save_path = manager.save()
@@ -232,7 +235,7 @@ def run_train_and_test(date,
                        n_iter=50000,
                        lr=0.01,
                        batch_size=128,
-                       plot_n_predict=True, logger=logging.getLogger("default")
+                       logger=logging.getLogger("default")
                        ):
     unique_name = create_unique_name(date, dataset_name, kernel_order, repetition, selector)
 
