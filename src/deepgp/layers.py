@@ -89,7 +89,8 @@ class SVGPLayer(Layer):
         self.num_inducing = Z.shape[0]
 
         # Inducing points prior mean
-        q_mu = np.zeros((self.num_inducing, num_outputs))
+        #q_mu = np.zeros((self.num_inducing, num_outputs))
+        q_mu = np.random.randn(self.num_inducing, num_outputs)
         self.q_mu = Parameter(q_mu, name="q_mu")
         # Square-root of inducing points prior covariance
         q_sqrt = np.tile(np.eye(self.num_inducing)[None, :, :], [num_outputs, 1, 1])

@@ -11,14 +11,16 @@ tf.random.set_seed(123)
 
 
 def create_kernel_pool(data_shape):
+    lin = create_linear(data_shape)
     se1 = create_rbf(data_shape)
     per1 = create_period(data_shape)
     se_per1 = create_se_per(data_shape)
     per_per = Product([create_period(data_shape), create_period(data_shape)])
-    return [se1, per1, se_per1, per_per]
+    return [lin, se1, per1, se_per1, per_per]
 
 
 def create_true_kernel_2():
+    lin = Linear(location=2.)
     small_per = Periodic(RBF(), period=2.)
     big_per = Periodic(RBF(), period=5.)
 
@@ -28,7 +30,7 @@ def create_true_kernel_2():
     # per2 = Periodic(RBF(), period=1.5)
     # se_per2 = Product([se2, per2])
     return Sum([
-        Product([small_per, big_per]),
+        Product([lin, se_per, big_per]),
         # se_per
     ])
     # return Sum([per, se_per2])
@@ -54,9 +56,9 @@ print("introduce noise: {}".format(noise))
 X, Y = generate_data(kernel, n_data=n_data, noise=noise)
 Y = Y[:, None]
 
-# plt.plot(X, Y)
-# plt.show()
-# exit(0)
+#plt.plot(X, Y)
+#plt.show()
+#exit(0)
 
 def split():
     X_train = X[:n_train]
@@ -104,7 +106,7 @@ def create_structral_gp():
 
 def run_justify(load=False, create_model_fn=create_structral_gp, chkpt_dir="../model/justify_our_model"):
     model = create_model_fn()
-    optimizer = tf.optimizers.Adam(lr=0.01)
+    optimizer = tf.optimizers.Adam(lr=0.1)
     train_loss = model.training_loss_closure((X, Y))
 
     chkpt = tf.train.Checkpoint(model=model)
