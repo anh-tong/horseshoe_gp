@@ -6,6 +6,7 @@ from gpflow import set_trainable
 from gpflow.kernels import Periodic, Product
 from gpflow.likelihoods import Gaussian
 from gpflow.models import SVGP
+from gpflow.utilities import to_default_float
 
 from src.kernel_generator_tf import Generator
 from src.kernels import create_rbf, create_period, additive, create_se_per
@@ -45,22 +46,26 @@ def fix_kernel_variance(kernels):
 
 def create_model(inducing_point, data_shape, num_data, selector="horseshoe", kernel_order=2,
                  repetition=2) -> StructuralSVGP:
-    # generator = Generator(data_shape, base_fn=[create_rbf, create_period])
-    # kernels = []
-    # for _ in range(repetition):
-    #     kernels.extend(generator.create_upto(upto_order=kernel_order))
+    generator = Generator(data_shape
+                          , base_fn=[create_rbf, create_period]
+                          )
+    kernels = []
+    for _ in range(repetition):
+        kernels.extend(generator.create_upto(upto_order=kernel_order))
 
-    kernels = additive(create_se_per, data_shape=data_shape, num_active_dims_per_kernel=1)
-    kernels.extend(additive(create_se_per, data_shape=data_shape, num_active_dims_per_kernel=1))
+#    kernels = additive(create_se_per, data_shape=data_shape, num_active_dims_per_kernel=1)
+#    kernels.extend(additive(create_se_per, data_shape=data_shape, num_active_dims_per_kernel=1))
     print("NUMBER OF KERNELS: {}".format(len(kernels)))
-    fix_kernel_variance(kernels)
+    # fix_kernel_variance(kernels)
     gps = []
     for kernel in kernels:
-        gp = SVGP(kernel, likelihood=None, inducing_variable=inducing_point)
+        gp = SVGP(kernel, likelihood=None, inducing_variable=inducing_point, q_mu=np.random.randn(100,1))
         gps.append(gp)
 
     if selector == "horseshoe":
         selector = HorseshoeSelector(dim=len(gps))
+        # from src.sparse_selector_tf import TrivialSparseSelector
+        # selector = TrivialSparseSelector(len(gps))
     elif selector == "spike_n_slab":
         selector = SpikeAndSlabSelector(dim=len(gps))
     else:
@@ -103,8 +108,9 @@ def train_and_test(model,
         # optimizer step
         optimize_step()
         # horseshoe update
-        # if isinstance(model.selector, HorseshoeSelector):
-        #     model.selector.update_tau_lambda()
+        if isinstance(model.selector, HorseshoeSelector):
+            model.selector.update_tau_lambda()
+
         # save checkpoint
         if (i + 1) % ckpt_feq == 0:
             save_path = manager.save()
@@ -118,7 +124,7 @@ def train_and_test(model,
                                                                                       ll.numpy()))
 
 
-def train(model, train_iter, ckpt_dir, ckpt_freq=1000, n_iter=10000, lr=0.01):
+def train(model, train_iter, ckpt_dir, ckpt_freq=1000, n_iter=10000, lr=0.01, dataset=None):
     optimizer = tf.optimizers.Adam(lr=lr)
 
     train_loss = model.training_loss_closure(train_iter)
@@ -137,6 +143,7 @@ def train(model, train_iter, ckpt_dir, ckpt_freq=1000, n_iter=10000, lr=0.01):
         print("Initialize from scratch !!!")
 
     for i in range(n_iter):
+        # model.elbo(next(train_iter))
         optimize_step()
         # additional update for the horseshoe case
         if isinstance(model.selector, HorseshoeSelector):
@@ -146,7 +153,19 @@ def train(model, train_iter, ckpt_dir, ckpt_freq=1000, n_iter=10000, lr=0.01):
         if (i + 1) % ckpt_freq == 0:
             save_path = manager.save()
             print("Saved checkpoint for step {}: {}".format(i + 1, save_path))
-            print("Iter {} \t Loss: {:.2f}".format(i, train_loss().numpy()))
+            x_test, y_test = dataset.get_test()
+            test_iter = make_data_iteration(x_test, y_test, batch_size=128, shuffle=False)
+            if test_iter is None:
+                print("Iter {} \t Loss: {:.2f}".format(i, train_loss().numpy()))
+            else:
+                error = []
+                for x_batch, y_batch in test_iter:
+                    mu, var = model.predict_y(x_batch)
+                    error += [tf.square(tf.squeeze(mu) - tf.squeeze(y_batch))]
+                error = tf.concat(error, axis=0)
+                rmse = tf.sqrt(tf.reduce_mean(error))
+                print("Iter {} \t Loss: {:.2f} \t RMSE: {:.2f}".format(i, train_loss().numpy(), rmse.numpy()))
+
 
     return model
 
@@ -188,15 +207,15 @@ def test_from_checkpoint(date, dataset_name, selector, kernel_order, repetition)
     print("RMSE: {} ".format(rmse.numpy()))
 
     # plot for 1D case
-    # n_test = 300
-    # x_test = tf.linspace(tf.reduce_min(x_train), tf.reduce_max(x_train), n_test)[:, None]
-    # y_test = tf.zeros_like(x_test)
-    # plot_iter = make_data_iteration(x_test, y_test, shuffle=False)
-    # mu, var, _ = test(plot_iter, model)
-    # lower = mu - 1.96 * tf.sqrt(var)
-    # upper = mu + 1.96 * tf.sqrt(var)
-    #
-    # plot(x_train, y_train, x_test.numpy(), mu.numpy(), lower.numpy(), upper.numpy())
+    n_test = 300
+    x_test = tf.linspace(tf.reduce_min(x_train), tf.reduce_max(x_train), n_test)[:, None]
+    y_test = tf.zeros_like(x_test)
+    plot_iter = make_data_iteration(x_test, y_test, shuffle=False)
+    mu, var, _ = test(plot_iter, model)
+    lower = mu - 1.96 * tf.sqrt(var)
+    upper = mu + 1.96 * tf.sqrt(var)
+
+    plot(x_train, y_train, x_test.numpy(), mu.numpy(), lower.numpy(), upper.numpy())
 
 
 def test(test_iter, model: StructuralSVGP):
@@ -232,7 +251,7 @@ def run_train_and_test(date,
                        n_iter=50000,
                        lr=0.01,
                        batch_size=128,
-                       plot_n_predict=True, logger=logging.getLogger("default")
+                       logger=logging.getLogger("default")
                        ):
     unique_name = create_unique_name(date, dataset_name, kernel_order, repetition, selector)
 
@@ -300,7 +319,7 @@ def run(date,
 
     # train
     ckpt_dir = "../model/{}".format(unique_name)
-    model = train(model, train_iter, ckpt_dir, n_iter=n_iter, lr=lr)
+    model = train(model, train_iter, ckpt_dir, n_iter=n_iter, lr=lr, dataset=dataset)
 
     if plot_n_predict:
         # predict
@@ -328,9 +347,9 @@ def create_unique_name(date, dataset_name, kernel_order, repetition, selector):
 
 
 if __name__ == "__main__":
-    # run(name="solar") # TODO: have a problem running this
-    # run(name="airline")
+    # run(date="0901", dataset_name="solar", lr=0.01, n_iter=10000) # TODO: have a problem running this
+    run(date="0831", dataset_name="airline")
     # run(name="mauna")
     # run(name="wheat-price")
-
-    test_from_checkpoint("airline")
+    run(date="0901", dataset_name="gefcom", lr=0.01, n_iter=0)
+    # test_from_checkpoint(date="0831_4", dataset_name="solar", selector="horseshoe", kernel_order=2, repetition=2)

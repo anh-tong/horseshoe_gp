@@ -58,6 +58,20 @@ class ABCDDataset(Dataset):
         self.data_dir = data_dir
         super().__init__(name)
 
+    def data(self, test_size=0.1, random_state=123):
+        x, y = self.retrieve()
+        # since this focus on the extrapolation for future prediction
+        self.n_test = int(test_size * self.n)
+        self.n_train = self.n - self.n_test
+        x_train = x[:self.n_train]
+        x_test = x[self.n_train:]
+        y_train = y[:self.n_train]
+        y_test = y[self.n_train:]
+        self.x_train = to_default_float(x_train)
+        self.x_test = to_default_float(x_test)
+        self.y_train = to_default_float(y_train)
+        self.y_test = to_default_float(y_test)
+
     def retrieve(self):
         data = sio.loadmat(self.data_dir)
         x = data["X"]
@@ -72,60 +86,60 @@ class UCIDataset(Dataset):
         self.data_dir = data_dir
         super().__init__(name)
 
-    # def data(self, test_size=0.1, random_state=123):
-    #     data, target = self.retrieve()
-    #     if data.shape[0] < 10000:
-    #         d = data
-    #     else:
-    #         indices = np.random.permutation(range(data.shape[0]))
-    #         d = data[indices][:10000]
-    #
-    #     pca = PCA(n_components=1)
-    #     pca.fit(d)
-    #     projected = pca.transform(data)
-    #
-    #     ind = list(np.argsort(projected.squeeze()))
-    #     len_ = len(ind)
-    #     test_ind = np.array(ind[: len_ // 15] + ind[-len_ // 15:])
-    #     train_ind = np.array(ind[len_ // 15: -len_ // 15])
-    #     test_ind = test_ind[np.random.permutation(len(test_ind))]
-    #     train_ind = train_ind[np.random.permutation(len(train_ind))]
-    #
-    #     assert len(test_ind) + len(train_ind) == len_, 'train set and test set should add to the whole set'
-    #     assert set(test_ind) - set(train_ind) == set(test_ind), 'train set and test set should be exclusive'
-    #
-    #     x_train, y_train = data[train_ind], target[train_ind]
-    #     x_test, y_test = data[test_ind], target[test_ind]
-    #
-    #     x_train, x_test, _, _ = standardize(x_train, x_test)
-    #     y_train, y_test, _, train_std = standardize(y_train, y_test)
-    #
-    #     self.n_train = x_train.shape[0]
-    #     self.n_test = x_test.shape[0]
-    #     self.std_y_train = train_std
-    #
-    #     self.x_train = to_default_float(x_train)
-    #     self.x_test = to_default_float(x_test)
-    #     self.y_train = to_default_float(y_train)
-    #     self.y_test = to_default_float(y_test)
+    def data(self, test_size=0.1, random_state=123):
+        data, target = self.retrieve()
+        if data.shape[0] < 10000:
+            d = data
+        else:
+            indices = np.random.permutation(range(data.shape[0]))
+            d = data[indices][:10000]
 
-    def data(self, test_size=0.1, random_state=1):
-        x, y = self.retrieve()
-        x_train, x_test, y_train, y_test = train_test_split(x, y,
-                                                            test_size=test_size,
-                                                            random_state=random_state)
+        pca = PCA(n_components=1)
+        pca.fit(d)
+        projected = pca.transform(data)
+
+        ind = list(np.argsort(projected.squeeze()))
+        len_ = len(ind)
+        test_ind = np.array(ind[: len_ // 15] + ind[-len_ // 15:])
+        train_ind = np.array(ind[len_ // 15: -len_ // 15])
+        test_ind = test_ind[np.random.permutation(len(test_ind))]
+        train_ind = train_ind[np.random.permutation(len(train_ind))]
+
+        assert len(test_ind) + len(train_ind) == len_, 'train set and test set should add to the whole set'
+        assert set(test_ind) - set(train_ind) == set(test_ind), 'train set and test set should be exclusive'
+
+        x_train, y_train = data[train_ind], target[train_ind]
+        x_test, y_test = data[test_ind], target[test_ind]
 
         x_train, x_test, _, _ = standardize(x_train, x_test)
-        y_train, y_test, _, std_y_train = standardize(y_train, y_test)
+        y_train, y_test, _, train_std = standardize(y_train, y_test)
 
         self.n_train = x_train.shape[0]
         self.n_test = x_test.shape[0]
-        self.std_y_train = std_y_train
+        self.std_y_train = train_std
 
         self.x_train = to_default_float(x_train)
         self.x_test = to_default_float(x_test)
         self.y_train = to_default_float(y_train)
         self.y_test = to_default_float(y_test)
+
+    # def data(self, test_size=0.1, random_state=1):
+    #     x, y = self.retrieve()
+    #     x_train, x_test, y_train, y_test = train_test_split(x, y,
+    #                                                         test_size=test_size,
+    #                                                         random_state=random_state)
+    #
+    #     x_train, x_test, _, _ = standardize(x_train, x_test)
+    #     y_train, y_test, _, std_y_train = standardize(y_train, y_test)
+    #
+    #     self.n_train = x_train.shape[0]
+    #     self.n_test = x_test.shape[0]
+    #     self.std_y_train = std_y_train
+    #
+    #     self.x_train = to_default_float(x_train)
+    #     self.x_test = to_default_float(x_test)
+    #     self.y_train = to_default_float(y_train)
+    #     self.y_test = to_default_float(y_test)
 
 
 
@@ -175,6 +189,25 @@ class MNISTDataset(Dataset):
         self.test_dataset = (test.batch(self.batch_size).map(map_fn, num_parallel_calls=autotune))
 
 
+class GEFCOM(Dataset):
+
+    def __init__(self, data_dir="../data/gefcom.mat"):
+        self.data_dir = data_dir
+        super().__init__(name="gefcom")
+
+    def retrieve(self):
+        data = sio.loadmat(self.data_dir)
+        X = data["times"]
+        Y = data["loads"][:,0]
+        Y = Y[:,None]
+        self.n = X.shape[0]
+        self.d = X.shape[1]
+        assert len(Y.shape) == 2
+        assert len(X.shape) == 2
+
+        return X, Y
+
+
 def get_dataset(name) -> Dataset:
 
     if name == "airline":
@@ -203,15 +236,69 @@ def get_dataset(name) -> Dataset:
         dataset = UCIDataset("../data/wine.data")
     elif name == "yatch":
         dataset = UCIDataset("../data/yacht_hydrodynamics.data")
+    elif name == "gefcom":
+        dataset = GEFCOM("../data/gefcom.mat")
+    elif name == "servo":
+        dataset = ServoDataset("../data/servo.mat")
+    elif name == "pima":
+        dataset = PimaDataset("../data/r_pima.mat")
+    elif name == "liver":
+        dataset = LiverDataset("../data/r_liver.mat")
+    elif name == "heart":
+        dataset = HeartDataset("../data/r_heart.mat")
     else:
         raise ValueError("Cannot find the dataset [{}]".format(name))
 
     return dataset
 
+
+class ServoDataset(Dataset):
+
+    def __init__(self, data_dir="../data/servo.mat"):
+        self.data_dir = data_dir
+        self.std_y_train = 1. # no normalization in this data set
+        super().__init__()
+
+
+    def retrieve(self):
+        data = sio.loadmat(self.data_dir)
+        x = data["X"]
+        y = data["y"]
+        assert len(x.shape) == 2
+        assert len(y.shape) == 2
+        return x, y
+
+class PimaDataset(Dataset):
+
+    def __init__(self, data_dir="../data/r_pima.mat"):
+        self.data_dir = data_dir
+        self.std_y_train = 1.
+        self.n_class = 2
+        super().__init__()
+
+    def retrieve(self):
+        data = sio.loadmat(self.data_dir)
+        x = data["X"]
+        y = data["y"]
+        y[y == -1] = 0.
+        assert len(x.shape) == 2
+        assert len(y.shape) == 2
+        return x, y
+
+class LiverDataset(PimaDataset):
+
+    pass
+
+class HeartDataset(PimaDataset):
+
+    pass
+
+
 def get_data_shape_from_XY(X, Y):
     data_shape = dict()
 
     data_shape["n_dims"] = X.shape[1]
+    data_shape["N"] = X.shape[0]
 
     data_shape["x_mean"] = np.mean(X, axis=0)
     data_shape["y_mean"] = np.mean(Y)
@@ -223,7 +310,10 @@ def get_data_shape_from_XY(X, Y):
     data_shape["y_max"] = np.max(Y)
 
     def min_abs_diff_i(x):
-        ret = []
+        if len(x) > 1000:
+            # make computation less intensive
+            x = np.random.permutation(x)[:1000]
+        min_value = np.infty
         for i in x:
             for j in x:
                 if i != j:
@@ -231,8 +321,10 @@ def get_data_shape_from_XY(X, Y):
                 else:
                     value = np.Inf
 
-                ret += [value]
-        return min(ret)
+                if value < min_value:
+                    min_value = value
+        return min_value
+
 
     def min_abs_diff(X):
         value = [min_abs_diff_i(X[:, i]) for i in range(X.shape[1])]
