@@ -69,7 +69,9 @@ from utils import branin_rcos, six_hump_camel_back, goldstein_price, rosenbrock,
 exec("from utils import " + args.acq_fun)
 exec("acq_fun = " + args.acq_fun + "()")
 
-from utils import create_rbf
+from src.kernels import create_rbf
+
+from utils import get_data_shape
 
 
 def acq_max(lb, ub, sur_model, y_max, acq_fun, n_warmup = 10000, iteration = 10):
@@ -82,7 +84,7 @@ def acq_max(lb, ub, sur_model, y_max, acq_fun, n_warmup = 10000, iteration = 10)
         x = x_tries,
         model = sur_model,
         ymax = y_max)
-    print(ys.shape)
+
     x_max = tf.expand_dims(x_tries[tf.squeeze(tf.argmax(ys))], 0)
     max_acq = tf.reduce_max(ys)
     
@@ -117,7 +119,6 @@ def acq_max(lb, ub, sur_model, y_max, acq_fun, n_warmup = 10000, iteration = 10)
 if __name__ == "__main__":
     
     ###Result directory
-
     for bench_fun in [branin_rcos, six_hump_camel_back, goldstein_price, rosenbrock, hartman_6, Styblinski_Tang, Michalewicz]:
         obj_fun = bench_fun()
 
@@ -126,6 +127,7 @@ if __name__ == "__main__":
             ###n_inducing = args.num_inducing
 
             #Initial Points given
+            tf.random.set_seed(2020 + num_test)
             x = tf.random.uniform(
                 (10, obj_fun.dim),
                 dtype=tf.dtypes.float64
@@ -134,8 +136,6 @@ if __name__ == "__main__":
             y = tf.expand_dims(obj_fun(x), 1)
 
             y_start = tf.reduce_min(y, axis=0).numpy()
-
-            print(y_start)
 
             #Initiali Training
             #optimizer = gpflow.optimizers.Scipy()

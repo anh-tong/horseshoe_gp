@@ -21,6 +21,8 @@ tf.autograph.set_verbosity(1)
 import numpy as np
 import pandas as pd
 
+import gc
+
 
 #-------------------------argparse-------------------------
 import argparse
@@ -129,21 +131,23 @@ if __name__ == "__main__":
     save_file = "./GP_Horseshoe_manual/"
     
     for bench_fun in [branin_rcos, six_hump_camel_back, goldstein_price, rosenbrock]:
+        gc.collect()
         obj_fun = bench_fun()
 
         df_result = pd.DataFrame(
             0,
             index=range(args.num_trial+1),
-            columns=range(args.num_init))  
+            columns=range(args.num_init))
 
         num_test = 0
         while num_test < args.num_init:
             #Initial Points given
+            tf.random.set_seed(2020 + num_test)
             x = tf.random.uniform(
                 (10, obj_fun.dim),
                 dtype=tf.dtypes.float64
             )
-            x = x * (obj_fun.upper_bound -obj_fun.lower_bound) + obj_fun.lower_bound
+            x = x * (obj_fun.upper_bound - obj_fun.lower_bound) + obj_fun.lower_bound
             y = tf.expand_dims(obj_fun(x), 1)
 
             y_start = tf.reduce_min(y, axis=0).numpy()
@@ -175,7 +179,7 @@ if __name__ == "__main__":
             model = StructuralSVGP(gps, selector, likelihood, n_inducing)
         
             #Bayesian Optimization iteration
-            for tries in range(args.num_trial):      
+            for tries in range(args.num_trial):
 
                 @tf.function
                 def optimize_step():

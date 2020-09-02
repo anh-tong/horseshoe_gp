@@ -126,6 +126,7 @@ if __name__ == "__main__":
             ###n_inducing = args.num_inducing
 
             #Initial Points given
+            tf.random.set_seed(2020 + num_test)
             x = tf.random.uniform(
                 (10, obj_fun.dim),
                 dtype=tf.dtypes.float64

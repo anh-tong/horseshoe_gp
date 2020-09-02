@@ -14,6 +14,7 @@ from gpflow.kernels import RBF, Product
 #from gpflow.mean_functions import Zero
 
 import tensorflow as tf
+tf.random.set_seed(2020)
 tf.get_logger().setLevel('ERROR')
 tf.autograph.set_verbosity(1)
 
@@ -57,7 +58,7 @@ POI: Probability of Improvement
 
 parser.add_argument('--num_trial', '-t', type = int, default = 200, help = "Number of Bayesian Optimization Interations")
 
-parser.add_argument('--num_init', '-n', type = int, default = 1,
+parser.add_argument('--num_init', '-n', type = int, default = 10,
                     help = "Number of runs for each benchmark function to change intial points randomly.")
 parser.add_argument('--learning_rate', '-l', type = float, default = 0.01, help = "learning rate in Adam optimizer")
 parser.add_argument('--num_step', '-u', type = int, default = 100, help = "number of steps in each BO iteration")
@@ -67,7 +68,7 @@ args = parser.parse_args()
 
 #exec("from utils import " + args.bench_fun)
 #exec("bench_fun = " + args.bench_fun)
-from utils import goldstein_price
+from utils import branin_rcos, six_hump_camel_back, goldstein_price, rosenbrock, hartman_6,  Styblinski_Tang, Michalewicz
 
 exec("from utils import " + args.acq_fun)
 exec("acq_fun = " + args.acq_fun + "()")
@@ -126,13 +127,13 @@ if __name__ == "__main__":
     ###Result directory
     save_file = "./GP_Horseshoe_manual/"
     
-    for bench_fun in [goldstein_price]:
+    for bench_fun in [Styblinski_Tang]:
         obj_fun = bench_fun()
 
         df_result = pd.DataFrame(
             0,
             index=range(args.num_trial+1),
-            columns=range(args.num_init))
+            columns=range(args.num_init))  
 
         num_test = 0
         while num_test < args.num_init:
@@ -173,7 +174,7 @@ if __name__ == "__main__":
             model = StructuralSVGP(gps, selector, likelihood, n_inducing)
         
             #Bayesian Optimization iteration
-            for tries in range(args.num_trial):
+            for tries in range(args.num_trial):      
 
                 @tf.function
                 def optimize_step():
@@ -201,14 +202,8 @@ if __name__ == "__main__":
                 #Result
                 y_end = tf.reduce_min(y, axis=0).numpy()
                 df_result.loc[tries + 1, num_test] = y_end
-                
-                print(tries)
 
             print(bench_fun.__name__ + "-test %d: %f->%f" %(num_test + 1, y_start, y_end))
             num_test += 1
 
-        for ind in range(10):
-            if os.path.isfile(save_file + args.acq_fun + "_" + bench_fun.__name__ + "_" + str(ind) + ".csv"):
-                pass
-            else:
-                df_result.to_csv(save_file + args.acq_fun + "_" + bench_fun.__name__ + ".csv")
+        df_result.to_csv(save_file + args.acq_fun + "_" + bench_fun.__name__ + ".csv")
