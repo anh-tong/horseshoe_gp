@@ -6,5 +6,5 @@ declare -a StringArray=("housing" "concrete" "energy" "kin8nm" "naval" "power_pl
 
 for dataset in "${StringArray[@]}";do
 	echo $dataset
-	python3 ../experimental/experiment_uci.py $date $dataset
+	python3 ../experimental/experiment_dgp.py $date $dataset
 done
