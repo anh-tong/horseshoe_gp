@@ -53,12 +53,28 @@ class StructuralSVGP(BayesianModel, ExternalDataTrainingLossMixin):
             mean, var = gp.predict_f(Xnew, full_cov, full_output_cov)
             means += [mean * w_i]
             w2_i = w_i ** 2
-            w2_i = tf.clip_by_value(w2_i, clip_value_min=1e-2, clip_value_max=1e3)
+            # w2_i = tf.clip_by_value(w2_i, clip_value_min=1e-2, clip_value_max=1e3)
             vars += [var * w2_i]
 
-        f_mean = sum(means)
-        f_var = sum(vars)
+        f_mean = tf.add_n(means)
+        f_var = tf.add_n(vars)
         return f_mean, f_var
+
+    def predict_f_s(self, X_new, full_cov=False, full_output_cov=False):
+
+        s = 5
+        means = []
+        vars = []
+        for _ in range(s):
+            mean, var = self.predict_f_s(X_new, full_cov, full_output_cov)
+            means.append(mean)
+            vars.append(var)
+
+        f_mean = 0.2 * tf.add_n(means)
+        f_var = 0.2 * tf.add_n(vars)
+        return f_mean, f_var
+
+
 
     def predict_y(self, Xnew, full_cov=False, full_output_cov=False):
         f_mean, f_var = self.predict_f(Xnew, full_cov, full_output_cov)
