@@ -1,14 +1,59 @@
 from src.experiment_tf import *
 import matplotlib.pyplot as plt
 from gpflow.config import set_default_jitter
+from gpflow.kernels import ChangePoints, White
+from src.kernels import create_changepoint
+from src.utils import ABCDDataset, standardize
 
 set_default_jitter(1e-3)
 
 # set random seed for reproducibility
-tf.random.set_seed(123)
-np.random.seed(123)
+tf.random.set_seed(1)
+np.random.seed(1)
 
 golden_ratio = (1 + 5 ** 0.5) / 2
+
+import scipy.io as sio
+class SolarDataSet(ABCDDataset):
+
+    def retrieve(self):
+        data = sio.loadmat(self.data_dir)
+        x = data["X"]
+        y = data["y"]
+        y, _, _ = standardize(y)
+        self.n = x.shape[0]
+        self.d = x.shape[1]
+        return x, y
+
+
+def create_model(inducing_point, data_shape, num_data, selector="horseshoe", kernel_order=2, repetition=2) -> StructuralSVGP:
+
+    print("Create model with changepoint")
+    ## Add change point of this data sets
+    generator = Generator(data_shape, base_fn=[create_rbf, create_period])
+    kernels = []
+    for _ in range(repetition):
+        kernels.extend(generator.create_upto(upto_order=kernel_order))
+
+    # # create changepoint
+    # cps = []
+    # for side in ["left", "right"]:
+    #     for base_fn in [create_rbf, create_period]:
+    #         cp = create_changepoint(data_shape, side=side, base_fn=base_fn)
+    #         cps.append(cp)
+    # kernels.extend(cps)
+
+    print("NUMBER OF KERNELS: {}".format(len(kernels)))
+
+    gps = []
+    for kernel in kernels:
+        gp = SVGP(kernel, likelihood=None, inducing_variable=inducing_point, q_mu=np.random.randn(100, 1))
+        gps.append(gp)
+
+    selector = HorseshoeSelector(dim=len(gps))
+    likelihood = Gaussian()
+    model = StructuralSVGP(gps, selector, likelihood, num_data)
+    return model
 
 
 def plot_abcd(x_train, y_train, x_test, y_test, x_extra, mu, lower, upper):
@@ -22,12 +67,12 @@ def plot_abcd(x_train, y_train, x_test, y_test, x_extra, mu, lower, upper):
 if __name__ == "__main__":
     # All parameters are here
     date = "0901"
-    dataset_name = "mauna"
+    dataset_name = "solar"
     kernel_order = 2
     repetition = 2
     selector = "horseshoe"
-    batch_size = 128
-    n_iter = 30000
+    batch_size = 300
+    n_iter = 20000
     lr = 0.01
 
     # train or load
@@ -42,7 +87,7 @@ if __name__ == "__main__":
                                      selector)
 
     # data
-    dataset = load_data(dataset_name)
+    dataset = SolarDataSet("../data/02-solar.mat")
     x_train, y_train = dataset.get_train()
     train_iter = make_data_iteration(x_train, y_train, batch_size=batch_size)
     x_test, y_test = dataset.get_test()

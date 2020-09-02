@@ -21,8 +21,8 @@ def plot_abcd(x_train, y_train, x_test, y_test, x_extra, mu, lower, upper):
 
 if __name__ == "__main__":
     # All parameters are here
-    date = "0901-5"
-    dataset_name = "airline"
+    date = "0901"
+    dataset_name = "mauna"
     kernel_order = 2
     repetition = 2
     selector = "horseshoe"
@@ -68,8 +68,8 @@ if __name__ == "__main__":
 
     x_extra = np.linspace(x_train[0], x_test[-1], 300)
     mu, var = model.predict_y(x_extra)
-    lower = mu - 1.96 * tf.sqrt(var)
-    upper = mu + 1.96 * tf.sqrt(var)
+    lower = mu - tf.sqrt(var)
+    upper = mu + tf.sqrt(var)
     mu, lower, upper = mu.numpy(), lower.numpy(), upper.numpy()
 
     x_train = dataset.x_train
