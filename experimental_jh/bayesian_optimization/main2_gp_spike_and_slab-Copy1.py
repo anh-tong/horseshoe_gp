@@ -130,7 +130,7 @@ if __name__ == "__main__":
         df_result = pd.DataFrame(
             0,
             index=range(args.num_trial+1),
-            columns=range(args.num_init))  
+            columns=range(args.num_init))
 
         num_test = 0
         while num_test < args.num_init:
@@ -139,7 +139,7 @@ if __name__ == "__main__":
                 (10, obj_fun.dim),
                 dtype=tf.dtypes.float64
             )
-            x = x * (obj_fun.upper_bound -obj_fun.lower_bound) + obj_fun.lower_bound
+            x = x * (obj_fun.upper_bound - obj_fun.lower_bound) + obj_fun.lower_bound
             y = tf.expand_dims(obj_fun(x), 1)
 
             y_start = tf.reduce_min(y, axis=0).numpy()

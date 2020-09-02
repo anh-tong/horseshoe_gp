@@ -157,7 +157,6 @@ if __name__ == "__main__":
                     obj_fun.lower_bound,
                     obj_fun.upper_bound,
                     model,
-                    11 + tries,
                     tf.reduce_max(y),
                     acq_fun)
 

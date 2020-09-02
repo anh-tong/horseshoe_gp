@@ -9,7 +9,7 @@ import gpflow
 from gpflow.optimizers import NaturalGradient
 from gpflow.models import SVGP, BayesianModel
 from gpflow.likelihoods import Gaussian
-from gpflow.kernels import RBF, Product
+from gpflow.kernels import RBF
 
 #from gpflow.mean_functions import Zero
 
@@ -40,7 +40,7 @@ HorseshoeSelector
 
 ###This parts is not used in Baseline
 parser.add_argument('--num_inducing', '-i', type = int, default = 10)
-parser.add_argument('--n_kernels', '-k', type = int, default = 3)
+parser.add_argument('--n_kernels', '-k', type = int, default = 2)
 
 """
 parser.add_argument('--bench_fun', '-b',
@@ -75,9 +75,9 @@ exec("acq_fun = " + args.acq_fun + "()")
 
 from src.sparse_selector_tf import HorseshoeSelector
 from src.structural_sgp_tf import StructuralSVGP
+from src.kernel_generator_tf import Generator
 
 from utils import get_data_shape
-from src.kernels import create_rbf, create_se_per
 
 def acq_max(lb, ub, sur_model, y_max, acq_fun, n_warmup = 10000, iteration = 10):
     x_tries = tf.random.uniform(
@@ -125,9 +125,9 @@ def acq_max(lb, ub, sur_model, y_max, acq_fun, n_warmup = 10000, iteration = 10)
 if __name__ == "__main__":
     
     ###Result directory
-    save_file = "./GP_Horseshoe_manual/"
+    save_file = "./GP_Horseshoe/"
     
-    for bench_fun in [Styblinski_Tang]:
+    for bench_fun in [branin_rcos, six_hump_camel_back, goldstein_price, rosenbrock]:
         obj_fun = bench_fun()
 
         df_result = pd.DataFrame(
@@ -138,6 +138,7 @@ if __name__ == "__main__":
         num_test = 0
         while num_test < args.num_init:
             #Initial Points given
+            tf.random.set_seed(2020 + num_test)
             x = tf.random.uniform(
                 (10, obj_fun.dim),
                 dtype=tf.dtypes.float64
@@ -160,9 +161,9 @@ if __name__ == "__main__":
             optimizer = tf.optimizers.Adam(
                 learning_rate=args.learning_rate)
             
-            ###model
-            data_shape = get_data_shape(x)
-            kernels = [create_rbf(data_shape), create_se_per(data_shape)] * args.n_kernels
+            ###model            
+            generator = Generator(get_data_shape(x))
+            kernels = generator.create_upto(args.n_kernels)
             
             gps = []
             for kernel in kernels:

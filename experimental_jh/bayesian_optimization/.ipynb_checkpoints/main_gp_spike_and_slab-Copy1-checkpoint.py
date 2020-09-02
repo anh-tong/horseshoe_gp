@@ -160,7 +160,6 @@ if __name__ == "__main__":
             ###model
             generator = Generator(get_data_shape(x))
             kernels = generator.create_upto(args.n_kernels)
-            #kernels = [RBF(), Periodic2(), Product([RBF(), Periodic2()])] * args.n_kernels
             
             gps = []
             for kernel in kernels:
