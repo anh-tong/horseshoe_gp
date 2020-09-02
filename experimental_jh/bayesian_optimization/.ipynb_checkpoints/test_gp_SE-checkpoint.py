@@ -57,7 +57,7 @@ parser.add_argument('--num_init', '-n', type = int, default = 10,
                     help = "Number of runs for each benchmark function to change intial points randomly.")
 parser.add_argument('--learning_rate', '-l', type = float, default = 3e-4, help = "learning rate in Adam optimizer")
 parser.add_argument('--noise_level', '-e', type = float, default = 0.01, help = "Noise in function evaluation")
-
+parser.add_argument('--num_step', '-u', type = int, default = 100, help = "number of steps in each BO iteration")
 
 args = parser.parse_args()
 #-------------------------argparse-------------------------
@@ -90,27 +90,6 @@ def acq_max(lb, ub, sur_model, y_max, acq_fun, n_warmup = 10000, iteration = 10)
     if tf.reduce_max(ys) > y_max:
         y_max = tf.reduce_max(ys)
         
-    for iterate in range(iteration):
-        locs = tf.random.uniform(
-            [1, obj_fun.dim],
-            dtype=tf.dtypes.float64) * (ub - lb) + lb
-        
-        opt_result = minimize(
-            lambda x: -acq_fun(
-                x = tf.reshape(locs, (1, -1)),
-                model = sur_model,
-                ymax = y_max).numpy(),
-            locs,
-            bounds=bounds,
-            method="L-BFGS-B")
-        
-        if not opt_result.success:
-            continue
-
-        if max_acq is None or -opt_result.fun >= max_acq:
-            x_max = tf.expand_dims(opt_result.x, 0)
-            max_acq = -opt_result.fun
-            
     return tf.clip_by_value(x_max, lb, ub)
 
 

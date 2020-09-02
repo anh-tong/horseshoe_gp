@@ -13,6 +13,8 @@ pi = tf.constant(np.pi, dtype = tf.dtypes.float64)
 def get_data_shape(x):
     ranked = tf.sort(x, axis = -1)
     return {
+        "N":x.shape[0],
+        "n_dims":x.shape[1],
         "x_max":tf.reduce_max(x, axis = 0),
         "x_min":tf.reduce_min(x, axis = 0),
         "x_sd":tf.math.reduce_std(x, axis = 0),

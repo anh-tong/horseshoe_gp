@@ -92,33 +92,8 @@ def acq_max(lb, ub, sur_model, y_max, acq_fun, n_warmup = 10000, iteration = 10)
     
     if tf.reduce_max(ys) > y_max:
         y_max = tf.reduce_max(ys)
-        
-    for iterate in range(iteration):
-        locs = tf.random.uniform(
-            [1, obj_fun.dim],
-            dtype=tf.dtypes.float64) * (ub - lb) + lb
-        var_locs = tf.Variable(locs)
-        
-        optimizer = tf.keras.optimizers.Adam()
-        optimizer.minimize(
-            lambda: -acq_fun(
-                x = tf.clip_by_value(tf.reshape(var_locs, (1, -1)), lb, ub),
-                model = sur_model,
-                ymax = y_max),
-            [var_locs]
-        )
-        
-        loc_res = var_locs
-        obj_res = acq_fun(
-            x = tf.clip_by_value(tf.reshape(loc_res, (1, -1)), lb, ub),
-            model=sur_model,
-            ymax=y_max)
-
-        if max_acq is None or obj_res >= max_acq:
-            x_max = loc_res
-            max_acq = obj_res
             
-    return x_max
+    return tf.clip_by_value(x_max, lb, ub)
 
 
 #main
@@ -127,7 +102,7 @@ if __name__ == "__main__":
     ###Result directory
     save_file = "./GP_Horseshoe/"
     
-    for bench_fun in [branin_rcos, six_hump_camel_back, goldstein_price, rosenbrock]:
+    for bench_fun in [hartman_6, Styblinski_Tang, Michalewicz]:
         obj_fun = bench_fun()
 
         df_result = pd.DataFrame(
@@ -161,10 +136,10 @@ if __name__ == "__main__":
             optimizer = tf.optimizers.Adam(
                 learning_rate=args.learning_rate)
             
-            ###model            
+            ###model
             generator = Generator(get_data_shape(x))
             kernels = generator.create_upto(args.n_kernels)
-            
+
             gps = []
             for kernel in kernels:
                 gp = SVGP(kernel, likelihood=None, inducing_variable=inducing_point)
@@ -176,7 +151,6 @@ if __name__ == "__main__":
         
             #Bayesian Optimization iteration
             for tries in range(args.num_trial):      
-
                 @tf.function
                 def optimize_step():
                     optimizer.minimize(
