@@ -118,7 +118,6 @@ if __name__ == "__main__":
             df_result.loc[0, num_test] = y_start
 
             #Initiali Training
-            #optimizer = gpflow.optimizers.Scipy()
             optimizer = tf.keras.optimizers.Adam()
             
             ###model
@@ -129,6 +128,8 @@ if __name__ == "__main__":
             
             #Bayesian Optimization iteration
             for tries in range(args.num_trial):
+                model.num_data = len(y)
+                
                 @tf.function
                 def optimize_step():
                     optimizer.minimize(

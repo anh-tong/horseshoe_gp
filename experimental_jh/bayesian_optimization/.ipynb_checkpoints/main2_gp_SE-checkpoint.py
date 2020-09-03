@@ -134,6 +134,8 @@ if __name__ == "__main__":
 
             #Bayesian Optimization iteration
             for tries in range(args.num_trial):
+                model.num_data = len(y)
+                
                 @tf.function
                 def optimize_step():
                     optimizer.minimize(

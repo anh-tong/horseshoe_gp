@@ -124,7 +124,7 @@ if __name__ == "__main__":
     ###Result directory
     save_file = "./GP_spike_and_slab/"
     
-    for bench_fun in [branin_rcos, six_hump_camel_back, goldstein_price, rosenbrock]:
+    for bench_fun in [hartman_6, Styblinski_Tang, Michalewicz]:
         obj_fun = bench_fun()
 
         df_result = pd.DataFrame(

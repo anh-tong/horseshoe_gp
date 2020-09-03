@@ -105,7 +105,7 @@ if __name__ == "__main__":
     ###Result directory
     save_file = "./GP_Horseshoe/"
     
-    for bench_fun in [hartman_6, Styblinski_Tang, Michalewicz]:
+    for bench_fun in [branin_rcos, six_hump_camel_back, goldstein_price, rosenbrock]:
         obj_fun = bench_fun()
 
         df_result = pd.DataFrame(
@@ -128,21 +128,19 @@ if __name__ == "__main__":
 
             df_result.loc[0, num_test] = y_start
 
-            ###number of inducing variables            
+            ###number of inducing variables
             inducing_point = obj_fun.lower_bound +  tf.random.uniform(
                 (50, obj_fun.dim),
                 dtype=tf.dtypes.float64
             ) * (obj_fun.upper_bound - obj_fun.lower_bound)
-
+            
             #Initialize Optimizer
-            optimizer = tf.optimizers.Adam(
-                learning_rate=args.learning_rate)
+            optimizer = tf.optimizers.Adam(learning_rate=args.learning_rate)
             
             ###model
             generator = Generator(get_data_shape(x))
             kernels = generator.create_upto(args.n_kernels)
             fix_kernel_variance(kernels)
-            print("Number of kernels is {}".format(len(kernels)))
 
             gps = []
             for kernel in kernels:
@@ -154,7 +152,9 @@ if __name__ == "__main__":
             model = StructuralSVGP(gps, selector, likelihood)
         
             #Bayesian Optimization iteration
-            for tries in range(args.num_trial):      
+            for tries in range(args.num_trial):
+                model.num_data = len(y)
+
                 @tf.function
                 def optimize_step():
                     optimizer.minimize(
@@ -182,6 +182,7 @@ if __name__ == "__main__":
                 #Result
                 y_end = tf.reduce_min(y, axis=0).numpy()
                 df_result.loc[tries + 1, num_test] = y_end
+                
 
             print(bench_fun.__name__ + "-test %d: %f->%f" %(num_test + 1, y_start, y_end))
             num_test += 1
