@@ -11,6 +11,12 @@ from gpflow.models import SVGP, BayesianModel
 from gpflow.likelihoods import Gaussian
 from gpflow.kernels import RBF
 
+from src.experiment_tf import init_inducing_points
+from src.sparse_selector_tf import HorseshoeSelector
+from src.structural_sgp_tf import StructuralSVGP
+from src.kernel_generator_tf import Generator
+from src.experiment_tf import fix_kernel_variance
+
 #from gpflow.mean_functions import Zero
 
 import tensorflow as tf
@@ -73,9 +79,6 @@ from utils import branin_rcos, six_hump_camel_back, goldstein_price, rosenbrock,
 exec("from utils import " + args.acq_fun)
 exec("acq_fun = " + args.acq_fun + "()")
 
-from src.sparse_selector_tf import HorseshoeSelector
-from src.structural_sgp_tf import StructuralSVGP
-from src.kernel_generator_tf import Generator
 
 from utils import get_data_shape
 
@@ -125,12 +128,11 @@ if __name__ == "__main__":
 
             df_result.loc[0, num_test] = y_start
 
-            ###number of inducing variables
-            n_inducing = args.num_inducing
-            inducing_point = tf.random.uniform(
-                (10, obj_fun.dim),
+            ###number of inducing variables            
+            inducing_point = obj_fun.lower_bound +  tf.random.uniform(
+                (50, obj_fun.dim),
                 dtype=tf.dtypes.float64
-            )
+            ) * (obj_fun.upper_bound - obj_fun.lower_bound)
 
             #Initialize Optimizer
             optimizer = tf.optimizers.Adam(
@@ -139,6 +141,8 @@ if __name__ == "__main__":
             ###model
             generator = Generator(get_data_shape(x))
             kernels = generator.create_upto(args.n_kernels)
+            fix_kernel_variance(kernels)
+            print("Number of kernels is {}".format(len(kernels)))
 
             gps = []
             for kernel in kernels:
@@ -147,7 +151,7 @@ if __name__ == "__main__":
                 
             selector = HorseshoeSelector(dim=len(gps))
             likelihood = Gaussian()
-            model = StructuralSVGP(gps, selector, likelihood, n_inducing)
+            model = StructuralSVGP(gps, selector, likelihood)
         
             #Bayesian Optimization iteration
             for tries in range(args.num_trial):      
@@ -156,7 +160,8 @@ if __name__ == "__main__":
                     optimizer.minimize(
                         model.training_loss_closure((x, y)),
                         model.trainable_variables)
-                    
+                
+                # optimize GP
                 for step in range(args.num_step):
                     optimize_step()
                     model.selector.update_tau_lambda()
