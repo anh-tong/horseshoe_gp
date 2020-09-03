@@ -64,7 +64,8 @@ def create_rbf(data_shape, sd=1., active_dims=None):
     return RBF(lengthscales=lengthscales, active_dims=active_dims)
 
 def create_period(data_shape, sd=1., active_dims=None):
-    base_kernel = create_rbf(data_shape, active_dims=active_dims)
+    # base_kernel = create_rbf(data_shape, active_dims=active_dims)
+    base_kernel = RBF(active_dims=active_dims)
 
     # weak prior
     p_min = np.log(10*(data_shape["x_max"] - data_shape["x_min"])/ data_shape["N"])

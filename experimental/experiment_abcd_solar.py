@@ -1,9 +1,11 @@
-from src.experiment_tf import *
 import matplotlib.pyplot as plt
 from gpflow.config import set_default_jitter
-from gpflow.kernels import ChangePoints, White
-from src.kernels import create_changepoint
+
+import scipy.io as sio
+from src.experiment_tf import *
+from src.kernels import create_linear, create_rbf, create_period
 from src.utils import ABCDDataset, standardize
+from gpflow.kernels import ChangePoints, White
 
 set_default_jitter(1e-3)
 
@@ -13,7 +15,56 @@ np.random.seed(1)
 
 golden_ratio = (1 + 5 ** 0.5) / 2
 
-import scipy.io as sio
+# BASE KERNEL config here
+BASE_FN = [create_linear, create_rbf, create_period]
+
+
+def create_kernels(data_shape, kernel_order, repetition):
+    generator = Generator(data_shape, base_fn=BASE_FN)
+    kernels = []
+    for _ in range(repetition):
+        generated = generator.create_upto(kernel_order)
+        kernels.extend(generated)
+
+    # fix kernel variance
+    fix_kernel_variance(kernels)
+
+    # r1 = create_se_per(data_shape)
+    # l1 = White(variance=1e-3)
+    # k1 = [l1, r1]
+    # fix_kernel_variance(k1)
+    # cp1 = ChangePoints(kernels=k1, locations=0.5*(data_shape["x_max"] + data_shape["x_min"]))
+    #
+    # r2 = White(variance=1e-3)
+    # l2 = create_se_per(data_shape)
+    # k2 = [l2, r2]
+    # fix_kernel_variance(k2)
+    # cp2 = ChangePoints(kernels=k2, locations=0.5*(data_shape["x_max"] + data_shape["x_min"]))
+    #
+    # kernels += [cp1]
+    # kernels += [cp2]
+
+
+    return kernels
+
+
+def create_model(inducing_point, data_shape, num_data, n_inducing, kernel_order, repetition):
+    kernels = create_kernels(data_shape, kernel_order, repetition)
+    print("Number of kernels is {}".format(len(kernels)))
+    gps = []
+    for kernel in kernels:
+        gp = SVGP(kernel,
+                  likelihood=None,
+                  inducing_variable=inducing_point,
+                  q_mu=np.random.randn(n_inducing, 1))
+        gps.append(gp)
+
+    selector = HorseshoeSelector(dim=len(gps))
+    likelihood = Gaussian()
+    model = StructuralSVGP(gps, selector, likelihood, num_data)
+
+    return model
+
 class SolarDataSet(ABCDDataset):
 
     def retrieve(self):
@@ -26,54 +77,26 @@ class SolarDataSet(ABCDDataset):
         return x, y
 
 
-def create_model(inducing_point, data_shape, num_data, selector="horseshoe", kernel_order=2, repetition=2) -> StructuralSVGP:
-
-    print("Create model with changepoint")
-    ## Add change point of this data sets
-    generator = Generator(data_shape, base_fn=[create_rbf, create_period])
-    kernels = []
-    for _ in range(repetition):
-        kernels.extend(generator.create_upto(upto_order=kernel_order))
-
-    # # create changepoint
-    # cps = []
-    # for side in ["left", "right"]:
-    #     for base_fn in [create_rbf, create_period]:
-    #         cp = create_changepoint(data_shape, side=side, base_fn=base_fn)
-    #         cps.append(cp)
-    # kernels.extend(cps)
-
-    print("NUMBER OF KERNELS: {}".format(len(kernels)))
-
-    gps = []
-    for kernel in kernels:
-        gp = SVGP(kernel, likelihood=None, inducing_variable=inducing_point, q_mu=np.random.randn(100, 1))
-        gps.append(gp)
-
-    selector = HorseshoeSelector(dim=len(gps))
-    likelihood = Gaussian()
-    model = StructuralSVGP(gps, selector, likelihood, num_data)
-    return model
-
-
 def plot_abcd(x_train, y_train, x_test, y_test, x_extra, mu, lower, upper):
     plt.figure(figsize=(3 * golden_ratio, 3))
     plt.plot(x_train, y_train, "k.")
     plt.plot(x_test, y_test, "*")
     plt.plot(x_extra, mu)
-    plt.fill_between(x_extra.squeeze(), lower.squeeze(), upper.squeeze(), alpha=0.2 )
+    plt.fill_between(x_extra.squeeze(), lower.squeeze(), upper.squeeze(), alpha=0.2)
+    plt.savefig("../figure/solar.png", dpi=300, bbox_inches="tight")
+    plt.savefig("../figure/solar.pdf", dpi=300, bbox_inches="tight")
 
 
 if __name__ == "__main__":
     # All parameters are here
-    date = "0901"
+    date = "0903-2"
     dataset_name = "solar"
     kernel_order = 2
-    repetition = 2
-    selector = "horseshoe"
-    batch_size = 300
+    repetition = 1
+    n_inducing = 200
+    batch_size = 128
     n_iter = 20000
-    lr = 0.01
+    lr = 0.1
 
     # train or load
     load = False
@@ -83,8 +106,7 @@ if __name__ == "__main__":
     unique_name = create_unique_name(date,
                                      dataset_name,
                                      kernel_order,
-                                     repetition,
-                                     selector)
+                                     repetition)
 
     # data
     dataset = SolarDataSet("../data/02-solar.mat")
@@ -93,15 +115,15 @@ if __name__ == "__main__":
     x_test, y_test = dataset.get_test()
     test_iter = make_data_iteration(x_test, y_test, batch_size=batch_size, shuffle=False)
 
-    inducing_point = init_inducing_points(x_train)
+    inducing_point = init_inducing_points(x_train, M=n_inducing)
 
     data_shape = get_data_shape(dataset)
 
     # create model
     model = create_model(inducing_point,
-                         selector=selector,
                          data_shape=data_shape,
                          num_data=len(y_train),
+                         n_inducing=n_inducing,
                          kernel_order=kernel_order,
                          repetition=repetition
                          )

@@ -1,4 +1,5 @@
 import os
+import sys
 
 from gpflow.likelihoods import Bernoulli
 
@@ -8,13 +9,13 @@ from src.utils import create_logger
 os.environ["CUDA_VISIBLE_DEVICES"] = "-1"
 
 
-def create_kernels(data_shape, addtive_order):
+def create_kernels(data_shape, additive_order):
     kernels = []
     for order in additive_order:
         print("Create additive order: {}".format(order))
         ks = additive(create_rbf, data_shape=data_shape, num_active_dims_per_kernel=order)
         kernels.extend(ks)
-
+    fix_kernel_variance(kernels)
     return kernels
 
 
@@ -66,7 +67,7 @@ def run_additive(date,
                  logger=logging.getLogger("default")
 
                  ):
-    unique_name = create_unique_name(date, dataset_name, None, None, None)
+    unique_name = create_unique_name(date, dataset_name, None, None)
 
     # data
     dataset = load_data(dataset_name)
@@ -160,14 +161,12 @@ def run_additive(date,
 
 
 if __name__ == "__main__":
-    # date = sys.argv[1]
-    # dataset_name = sys.argv[2]
-    date = "0902"
-    dataset_name = "heart"
+    date = sys.argv[1]
+    dataset_name = sys.argv[2]
     # LOAD OR NOT
     load = False
 
-    n_iter = 10000
+    n_iter = 5000
     lr = 0.01
 
     if dataset_name == "housing":
@@ -194,7 +193,7 @@ if __name__ == "__main__":
     if load:
         n_iter = 0
 
-    unique_name = create_unique_name(date, dataset_name, kernel_order=None, repetition=None, selector=None)
+    unique_name = create_unique_name(date, dataset_name, kernel_order=None, repetition=None)
 
     logger = create_logger("../log", unique_name, __file__)
 

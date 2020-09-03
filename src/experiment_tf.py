@@ -21,7 +21,8 @@ def load_data(name="airline"):
 
 
 def init_inducing_points(x, M=100):
-    return x[:M]
+    x_perm = tf.random.shuffle(x)
+    return x_perm[:M]
 
 
 def make_data_iteration(x, y, batch_size=128, shuffle=True):
@@ -56,7 +57,7 @@ def create_model(inducing_point, data_shape, num_data, selector="horseshoe", ker
 #    kernels = additive(create_se_per, data_shape=data_shape, num_active_dims_per_kernel=1)
 #    kernels.extend(additive(create_se_per, data_shape=data_shape, num_active_dims_per_kernel=1))
     print("NUMBER OF KERNELS: {}".format(len(kernels)))
-    # fix_kernel_variance(kernels)
+    fix_kernel_variance(kernels)
     gps = []
     for kernel in kernels:
         gp = SVGP(kernel, likelihood=None, inducing_variable=inducing_point, q_mu=np.random.randn(100,1))
@@ -341,8 +342,8 @@ def run(date,
         plot(x_train, y_train, x_test.numpy(), mu.numpy(), lower.numpy(), upper.numpy())
 
 
-def create_unique_name(date, dataset_name, kernel_order, repetition, selector):
-    name = "ds_{}_kernel_{}{}_s_{}_date_{}".format(dataset_name, kernel_order, repetition, selector, date)
+def create_unique_name(date, dataset_name, kernel_order, repetition):
+    name = "{}_{}_kernel_{}{}".format(dataset_name, date,kernel_order, repetition)
     return name
 
 

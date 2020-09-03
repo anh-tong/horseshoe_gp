@@ -200,6 +200,7 @@ class GEFCOM(Dataset):
         X = data["times"]
         Y = data["loads"][:,0]
         Y = Y[:,None]
+        Y, _, _ = standardize(Y)
         self.n = X.shape[0]
         self.d = X.shape[1]
         assert len(Y.shape) == 2
