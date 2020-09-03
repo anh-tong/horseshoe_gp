@@ -53,11 +53,10 @@ POI: Probability of Improvement
 
 parser.add_argument('--num_trial', '-t', type = int, default = 200, help = "Number of Bayesian Optimization Interations")
 
-parser.add_argument('--num_init', '-n', type = int, default = 1,
+parser.add_argument('--num_init', '-n', type = int, default = 10,
                     help = "Number of runs for each benchmark function to change intial points randomly.")
-parser.add_argument('--learning_rate', '-l', type = float, default = 3e-4, help = "learning rate in Adam optimizer")
-parser.add_argument('--noise_level', '-e', type = float, default = 0.01, help = "Noise in function evaluation")
-parser.add_argument('--num_step', '-u', type = int, default = 100, help = "number of steps in each BO iteration")
+parser.add_argument('--learning_rate', '-l', type = float, default = 0.1, help = "learning rate in Adam optimizer")
+parser.add_argument('--num_step', '-u', type = int, default = 1000, help = "number of steps in each BO iteration")
 
 args = parser.parse_args()
 #-------------------------argparse-------------------------
@@ -72,9 +71,6 @@ exec("acq_fun = " + args.acq_fun + "()")
 from src.kernels import create_rbf
 
 from utils import get_data_shape
-
-from gpflow.models.gpr.util import data_input_to_tensor
-
 
 def acq_max(lb, ub, sur_model, y_max, acq_fun, n_warmup = 10000, iteration = 10):
     bounds = Bounds(lb, ub)
@@ -134,7 +130,7 @@ if __name__ == "__main__":
 
             #Bayesian Optimization iteration
             for tries in range(args.num_trial):
-                model.num_data = len(y)
+                model.data = (x,y)
                 
                 @tf.function
                 def optimize_step():
@@ -142,7 +138,7 @@ if __name__ == "__main__":
                         model.training_loss,
                         model.trainable_variables)
 
-                for step in range(args.num_step - tries):
+                for step in range(args.num_step):
                     optimize_step()
                 
                 x_new = acq_max(
@@ -157,9 +153,6 @@ if __name__ == "__main__":
 
                 x = tf.concat([x, x_new], 0)
                 y = tf.concat([y, y_new], 0)
-
-                ###model update
-                model.num_data += 1
 
                 #Result
                 y_end = tf.reduce_min(y, axis=0).numpy()
