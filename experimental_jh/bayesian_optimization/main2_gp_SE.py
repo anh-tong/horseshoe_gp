@@ -56,7 +56,7 @@ parser.add_argument('--num_trial', '-t', type = int, default = 200, help = "Numb
 parser.add_argument('--num_init', '-n', type = int, default = 10,
                     help = "Number of runs for each benchmark function to change intial points randomly.")
 parser.add_argument('--learning_rate', '-l', type = float, default = 0.1, help = "learning rate in Adam optimizer")
-parser.add_argument('--num_step', '-u', type = int, default = 1000, help = "number of steps in each BO iteration")
+parser.add_argument('--num_step', '-u', type = int, default = 10000, help = "number of steps in each BO iteration")
 
 args = parser.parse_args()
 #-------------------------argparse-------------------------
@@ -96,6 +96,8 @@ def acq_max(lb, ub, sur_model, y_max, acq_fun, n_warmup = 10000, iteration = 10)
 if __name__ == "__main__":
     
     ###Result directory
+    save_file = "./GP_SE/"
+    
     for bench_fun in [branin_rcos, six_hump_camel_back, goldstein_price, rosenbrock, hartman_6, Styblinski_Tang, Michalewicz]:
         obj_fun = bench_fun()
         
@@ -132,13 +134,17 @@ if __name__ == "__main__":
             for tries in range(args.num_trial):
                 model.data = (x,y)
                 
+                train_loss = model.training_loss_closure()
+                
                 @tf.function
                 def optimize_step():
                     optimizer.minimize(
-                        model.training_loss,
+                        train_loss,
                         model.trainable_variables)
 
-                for step in range(args.num_step):
+                #for step in range(args.num_step):
+                #    optimize_step()
+                while train_loss() > 100:
                     optimize_step()
                 
                 x_new = acq_max(
