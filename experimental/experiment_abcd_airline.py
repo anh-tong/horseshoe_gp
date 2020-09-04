@@ -55,7 +55,7 @@ def plot_abcd(x_train, y_train, x_test, y_test, x_extra, mu, lower, upper):
 
 if __name__ == "__main__":
     # All parameters are here
-    date = "0903"
+    date = "0904"
     dataset_name = "airline"
     kernel_order = 2
     repetition = 2
@@ -66,7 +66,7 @@ if __name__ == "__main__":
     n_inducing = 100
 
     # train or load
-    load = True
+    load = False
     if load:
         n_iter = 0
 

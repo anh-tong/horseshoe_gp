@@ -3,6 +3,14 @@ import matplotlib.pyplot as plt
 from src.kernels import create_linear, create_rbf, create_period
 from gpflow.config import set_default_jitter
 
+# plotting style
+import matplotlib
+matplotlib.rcParams.update({'font.size':14,'figure.subplot.bottom':0.125})
+# from matplotlib import rc
+# rc('font',**{'family':'sans-serif','sans-serif':['Helvetica']})
+import seaborn as sns
+sns.set_style({"font.family":"serif"})
+
 set_default_jitter(1e-3)
 
 # set random seed for reproducibility
@@ -56,7 +64,7 @@ def plot_abcd(x_train, y_train, x_test, y_test, x_extra, mu, lower, upper):
 
 if __name__ == "__main__":
     # All parameters are here
-    date = "0903"
+    date = "0904"
     dataset_name = "mauna"
     kernel_order = 2
     repetition = 2
