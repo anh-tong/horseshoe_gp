@@ -155,7 +155,7 @@ if __name__ == "__main__":
                         model.trainable_variables)
                 
                 # optimize GP
-                while train_loss() > 70:
+                while train_loss() > 80:
                     for step in range(args.num_step):
                         optimize_step()
                         model.selector.update_tau_lambda()

@@ -96,7 +96,7 @@ if __name__ == "__main__":
     ###Result directory
     save_file = "./GP_Horseshoe_manual/"
     
-    for bench_fun in [branin_rcos]:
+    for bench_fun in [Styblinski_Tang]:
         obj_fun = bench_fun()
 
         df_result = pd.DataFrame(
@@ -155,7 +155,7 @@ if __name__ == "__main__":
                         model.trainable_variables)
                 
                 # optimize GP
-                while train_loss() > 70:
+                while train_loss() > 80:
                     for step in range(args.num_step):
                         optimize_step()
                         model.selector.update_tau_lambda()
