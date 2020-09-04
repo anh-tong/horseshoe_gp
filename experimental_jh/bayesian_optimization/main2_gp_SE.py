@@ -73,7 +73,6 @@ from src.kernels import create_rbf
 from utils import get_data_shape
 
 def acq_max(lb, ub, sur_model, y_max, acq_fun, n_warmup = 10000, iteration = 10):
-    bounds = Bounds(lb, ub)
     
     x_tries = tf.random.uniform(
         [n_warmup, obj_fun.dim],

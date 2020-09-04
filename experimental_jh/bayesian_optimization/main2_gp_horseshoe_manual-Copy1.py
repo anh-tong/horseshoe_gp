@@ -34,16 +34,6 @@ parser = argparse.ArgumentParser()
 
 parser.add_argument('--show_plot', '-v', type = bool, default = True)
 
-###This is argument for selector, but not used in baseline
-parser.add_argument('--selector', '-s',
-choices=["TrivialSelector", "SpikeAndSlabSelector", "HorseshoeSelector"],
-help='''
-Selectors:
-TrivialSelector
-SpikeAndSlabSelector
-HorseshoeSelector
-''', default = "HorseshoeSelector")
-
 ###This parts is not used in Baseline
 parser.add_argument('--num_inducing', '-i', type = int, default = 10)
 parser.add_argument('--n_kernels', '-k', type = int, default = 2)
@@ -67,7 +57,8 @@ parser.add_argument('--num_trial', '-t', type = int, default = 200, help = "Numb
 parser.add_argument('--num_init', '-n', type = int, default = 10,
                     help = "Number of runs for each benchmark function to change intial points randomly.")
 parser.add_argument('--learning_rate', '-l', type = float, default = 0.1, help = "learning rate in Adam optimizer")
-parser.add_argument('--num_step', '-u', type = int, default = 1000, help = "number of steps in each BO iteration")
+parser.add_argument('--num_init_step', '-u', type = int, default = 5000, help = "number of steps in each BO iteration")
+parser.add_argument('--num_step', '-s', type = int, default = 500, help = "number of steps in each BO iteration")
 
 args = parser.parse_args()
 #-------------------------argparse-------------------------
@@ -163,10 +154,14 @@ if __name__ == "__main__":
                         model.trainable_variables)
                 
                 # optimize GP
-                for step in range(args.num_step):
-                    optimize_step()
-                    model.selector.update_tau_lambda()
-#                     print("Iter {}  Loss{}".format(step, train_loss().numpy()))
+                if tries == 0 :
+                    for step in range(args.num_init_step):
+                        optimize_step()
+                        model.selector.update_tau_lambda()
+                else:
+                    for step in range(args.num_step):
+                        optimize_step()
+                        model.selector.update_tau_lambda()
 
                 x_new = acq_max(
                     obj_fun.lower_bound,

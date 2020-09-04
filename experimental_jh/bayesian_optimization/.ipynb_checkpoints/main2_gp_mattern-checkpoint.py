@@ -125,6 +125,10 @@ if __name__ == "__main__":
                 kernel=gpflow.kernels.Matern52(),
                 mean_function=None)
             
+            while train_loss() > 1000:
+                    for i in range(args.num_step):
+                        optimize_step()
+            
             #Bayesian Optimization iteration
             for tries in range(args.num_trial):
                 model.data = (x, y)

@@ -155,7 +155,7 @@ if __name__ == "__main__":
                         model.trainable_variables)
                 
                 # optimize GP
-                if tries == 0 :
+                if tries == 0:
                     for step in range(args.num_init_step):
                         optimize_step()
                         model.selector.update_tau_lambda()
