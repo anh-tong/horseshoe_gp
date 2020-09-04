@@ -107,7 +107,6 @@ if __name__ == "__main__":
 
         num_test = 0
         while num_test < args.num_init:
-            ###n_inducing = args.num_inducing
 
             #Initial Points given
             tf.random.set_seed(2020 + num_test)
@@ -119,6 +118,8 @@ if __name__ == "__main__":
             y = tf.expand_dims(obj_fun(x), 1)
 
             y_start = tf.reduce_min(y, axis=0).numpy()
+            
+            df_result.loc[0, num_test] = y_start
 
             #Initiali Training
             optimizer = tf.keras.optimizers.Adam()
@@ -134,6 +135,7 @@ if __name__ == "__main__":
                 model.data = (x,y)
                 
                 train_loss = model.training_loss_closure()
+                prev_loss = train_loss().numpy()
                 
                 @tf.function
                 def optimize_step():
@@ -143,9 +145,10 @@ if __name__ == "__main__":
 
                 #for step in range(args.num_step):
                 #    optimize_step()
-                while train_loss() > 1000:
-                    for i in range(args.num_step):
+                while train_loss() + 1 < prev_loss:
+                    for step in range(args.num_step):
                         optimize_step()
+                    prev_loss = train_loss().numpy()
                 
                 x_new = acq_max(
                     obj_fun.lower_bound,

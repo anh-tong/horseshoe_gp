@@ -57,8 +57,7 @@ parser.add_argument('--num_trial', '-t', type = int, default = 200, help = "Numb
 parser.add_argument('--num_init', '-n', type = int, default = 10,
                     help = "Number of runs for each benchmark function to change intial points randomly.")
 parser.add_argument('--learning_rate', '-l', type = float, default = 0.1, help = "learning rate in Adam optimizer")
-parser.add_argument('--num_init_step', '-u', type = int, default = 5000, help = "number of steps in each BO iteration")
-parser.add_argument('--num_step', '-s', type = int, default = 500, help = "number of steps in each BO iteration")
+parser.add_argument('--num_step', '-s', type = int, default = 10, help = "number of steps in each BO iteration")
 
 args = parser.parse_args()
 #-------------------------argparse-------------------------
@@ -97,7 +96,7 @@ if __name__ == "__main__":
     ###Result directory
     save_file = "./GP_Horseshoe_manual/"
     
-    for bench_fun in [branin_rcos, six_hump_camel_back, goldstein_price, rosenbrock]:
+    for bench_fun in [six_hump_camel_back]:
         obj_fun = bench_fun()
 
         df_result = pd.DataFrame(
@@ -122,12 +121,13 @@ if __name__ == "__main__":
 
             ###number of inducing variables
             inducing_point = obj_fun.lower_bound +  tf.random.uniform(
-                (50, obj_fun.dim),
+                (200, obj_fun.dim),
                 dtype=tf.dtypes.float64
             ) * (obj_fun.upper_bound - obj_fun.lower_bound)
             
             #Initialize Optimizer
             optimizer = tf.optimizers.Adam(learning_rate=args.learning_rate)
+            
             ###model
             generator = Generator(get_data_shape(x))
             kernels = [create_rbf(get_data_shape(x)), create_se_per(get_data_shape(x))] * args.n_kernels
@@ -143,10 +143,11 @@ if __name__ == "__main__":
             model = StructuralSVGP(gps, selector, likelihood)
         
             #Bayesian Optimization iteration
-            for tries in range(args.num_trial):      
+            for tries in range(args.num_trial):
                 model.num_data = len(y)
                 
                 train_loss = model.training_loss_closure((x, y))
+                
                 @tf.function
                 def optimize_step():
                     optimizer.minimize(
@@ -154,11 +155,7 @@ if __name__ == "__main__":
                         model.trainable_variables)
                 
                 # optimize GP
-                if tries == 0 :
-                    for step in range(args.num_init_step):
-                        optimize_step()
-                        model.selector.update_tau_lambda()
-                else:
+                while train_loss() > 70:
                     for step in range(args.num_step):
                         optimize_step()
                         model.selector.update_tau_lambda()
@@ -180,7 +177,6 @@ if __name__ == "__main__":
                 y_end = tf.reduce_min(y, axis=0).numpy()
                 df_result.loc[tries + 1, num_test] = y_end
                 
-
             print(bench_fun.__name__ + "-test %d: %f->%f" %(num_test + 1, y_start, y_end))
             num_test += 1
 

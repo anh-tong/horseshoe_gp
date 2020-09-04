@@ -57,8 +57,7 @@ parser.add_argument('--num_trial', '-t', type = int, default = 200, help = "Numb
 parser.add_argument('--num_init', '-n', type = int, default = 10,
                     help = "Number of runs for each benchmark function to change intial points randomly.")
 parser.add_argument('--learning_rate', '-l', type = float, default = 0.1, help = "learning rate in Adam optimizer")
-parser.add_argument('--num_init_step', '-u', type = int, default = 5000, help = "number of steps in each BO iteration")
-parser.add_argument('--num_step', '-s', type = int, default = 100, help = "number of steps in each BO iteration")
+parser.add_argument('--num_step', '-s', type = int, default = 10, help = "number of steps in each BO iteration")
 
 args = parser.parse_args()
 #-------------------------argparse-------------------------
@@ -70,8 +69,9 @@ from utils import branin_rcos, six_hump_camel_back, goldstein_price, rosenbrock,
 exec("from utils import " + args.acq_fun)
 exec("acq_fun = " + args.acq_fun + "()")
 
-
 from utils import get_data_shape
+
+from src.kernels import create_rbf, create_se_per
 
 def acq_max(lb, ub, sur_model, y_max, acq_fun, n_warmup = 10000, iteration = 10):
     x_tries = tf.random.uniform(
@@ -94,9 +94,9 @@ def acq_max(lb, ub, sur_model, y_max, acq_fun, n_warmup = 10000, iteration = 10)
 if __name__ == "__main__":
     
     ###Result directory
-    save_file = "./GP_Horseshoe/"
+    save_file = "./GP_Horseshoe_manual/"
     
-    for bench_fun in [branin_rcos, six_hump_camel_back, goldstein_price, rosenbrock]:
+    for bench_fun in [goldstein_price]:
         obj_fun = bench_fun()
 
         df_result = pd.DataFrame(
@@ -112,7 +112,7 @@ if __name__ == "__main__":
                 (10, obj_fun.dim),
                 dtype=tf.dtypes.float64
             )
-            x = x * (obj_fun.upper_bound -obj_fun.lower_bound) + obj_fun.lower_bound
+            x = x * (obj_fun.upper_bound - obj_fun.lower_bound) + obj_fun.lower_bound
             y = tf.expand_dims(obj_fun(x), 1)
 
             y_start = tf.reduce_min(y, axis=0).numpy()
@@ -121,7 +121,7 @@ if __name__ == "__main__":
 
             ###number of inducing variables
             inducing_point = obj_fun.lower_bound +  tf.random.uniform(
-                (50, obj_fun.dim),
+                (200, obj_fun.dim),
                 dtype=tf.dtypes.float64
             ) * (obj_fun.upper_bound - obj_fun.lower_bound)
             
@@ -130,7 +130,7 @@ if __name__ == "__main__":
             
             ###model
             generator = Generator(get_data_shape(x))
-            kernels = generator.create_upto(args.n_kernels)
+            kernels = [create_rbf(get_data_shape(x)), create_se_per(get_data_shape(x))] * args.n_kernels
             fix_kernel_variance(kernels)
 
             gps = []
@@ -145,7 +145,7 @@ if __name__ == "__main__":
             #Bayesian Optimization iteration
             for tries in range(args.num_trial):
                 model.num_data = len(y)
-
+                
                 train_loss = model.training_loss_closure((x, y))
                 
                 @tf.function
@@ -155,11 +155,7 @@ if __name__ == "__main__":
                         model.trainable_variables)
                 
                 # optimize GP
-                if tries == 0 :
-                    for step in range(args.num_init_step):
-                        optimize_step()
-                        model.selector.update_tau_lambda()
-                else:
+                while train_loss() > 70:
                     for step in range(args.num_step):
                         optimize_step()
                         model.selector.update_tau_lambda()
@@ -181,7 +177,6 @@ if __name__ == "__main__":
                 y_end = tf.reduce_min(y, axis=0).numpy()
                 df_result.loc[tries + 1, num_test] = y_end
                 
-
             print(bench_fun.__name__ + "-test %d: %f->%f" %(num_test + 1, y_start, y_end))
             num_test += 1
 

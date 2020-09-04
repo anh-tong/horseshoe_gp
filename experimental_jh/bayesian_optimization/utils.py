@@ -43,7 +43,7 @@ class EI:
     def __call__(self, x, model, ymax):
         mean, var = model.predict_f(x)
         std = tf.sqrt(var)
-        z = (mean - ymax - 0.01) / std
+        z = (mean - ymax) / std
         return tf.squeeze(std * (z * self.norm.cdf(z) + self.norm.prob(z)))
 
 class POI:
