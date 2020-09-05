@@ -103,7 +103,8 @@ if __name__ == "__main__":
             0,
             index=range(args.num_trial+1),
             columns=range(args.num_init))
-
+    
+        
         num_test = 0
         while num_test < args.num_init:
 
@@ -144,10 +145,8 @@ if __name__ == "__main__":
 
                 #for step in range(args.num_step):
                 #    optimize_step()
-                while train_loss() + 1 < prev_loss:
-                    for step in range(args.num_step):
-                        optimize_step()
-                    prev_loss = train_loss().numpy()
+                for step in range(args.num_step):
+                    optimize_step()
                 
                 x_new = acq_max(
                     obj_fun.lower_bound,
@@ -158,6 +157,7 @@ if __name__ == "__main__":
 
                 #Evaluation of new points
                 y_new = tf.expand_dims(obj_fun(x_new), 1)
+                print(y_new.numpy())
 
                 x = tf.concat([x, x_new], 0)
                 y = tf.concat([y, y_new], 0)

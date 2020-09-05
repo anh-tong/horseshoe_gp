@@ -41,6 +41,9 @@ class EI:
             tf.ones(1, dtype=tf.dtypes.float64))
         
     def __call__(self, x, model, ymax):
+        for i in range(5):
+            w = model.selector.sample()
+            print(i, w.numpy())
         mean, var = model.predict_f(x)
         std = tf.sqrt(var)
         z = (mean - ymax) / std
