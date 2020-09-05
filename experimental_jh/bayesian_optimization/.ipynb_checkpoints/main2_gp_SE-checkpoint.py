@@ -6,7 +6,6 @@ sys.path.append("../..")
 
 
 import gpflow
-from gpflow.kernels import SquaredExponential
 
 import tensorflow as tf
 tf.random.set_seed(2020)

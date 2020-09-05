@@ -35,7 +35,7 @@ parser = argparse.ArgumentParser()
 parser.add_argument('--show_plot', '-v', type = bool, default = True)
 
 ###This parts is not used in Baseline
-parser.add_argument('--num_inducing', '-i', type = int, default = 10)
+parser.add_argument('--num_inducing', '-i', type = int, default = 50)
 parser.add_argument('--n_kernels', '-k', type = int, default = 2)
 
 """
@@ -96,7 +96,7 @@ if __name__ == "__main__":
     ###Result directory
     save_file = "./GP_Horseshoe_manual/"
     
-    for bench_fun in [branin_rcos]:
+    for bench_fun in [Michalewicz]:
         obj_fun = bench_fun()
 
         df_result = pd.DataFrame(
@@ -121,7 +121,7 @@ if __name__ == "__main__":
 
             ###number of inducing variables
             inducing_point = obj_fun.lower_bound +  tf.random.uniform(
-                (200, obj_fun.dim),
+                (args.num_inducing, obj_fun.dim),
                 dtype=tf.dtypes.float64
             ) * (obj_fun.upper_bound - obj_fun.lower_bound)
             
@@ -153,12 +153,14 @@ if __name__ == "__main__":
                     optimizer.minimize(
                         train_loss,
                         model.trainable_variables)
+                    
+                prev_loss = train_loss().numpy()
                 
                 # optimize GP
-                while train_loss() > 80:
+                while train_loss() + 1 < prev_loss:
+                    prev_loss = train_loss().numpy()
                     for step in range(args.num_step):
                         optimize_step()
-                        model.selector.update_tau_lambda()
 
                 x_new = acq_max(
                     obj_fun.lower_bound,
