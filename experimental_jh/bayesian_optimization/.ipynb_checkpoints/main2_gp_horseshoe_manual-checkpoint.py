@@ -56,8 +56,10 @@ parser.add_argument('--num_trial', '-t', type = int, default = 200, help = "Numb
 
 parser.add_argument('--num_init', '-n', type = int, default = 10,
                     help = "Number of runs for each benchmark function to change intial points randomly.")
-parser.add_argument('--learning_rate', '-l', type = float, default = 0.1, help = "learning rate in Adam optimizer")
-parser.add_argument('--num_step', '-s', type = int, default = 10, help = "number of steps in each BO iteration")
+parser.add_argument('--learning_rate', '-l', type = float, default = 0.01, help = "learning rate in Adam optimizer")
+parser.add_argument('--num_step', '-s', type = int, default = 5000, help = "number of steps in each BO iteration")
+
+parser.add_argument('--bench_fun_list', '-b', nargs='+')
 
 args = parser.parse_args()
 #-------------------------argparse-------------------------
@@ -96,8 +98,8 @@ if __name__ == "__main__":
     ###Result directory
     save_file = "./GP_Horseshoe_manual/"
     
-    for bench_fun in [hartman_6]:
-        obj_fun = bench_fun()
+    for bench_fun in args.bench_fun_list.split(','):
+        eval("obj_fun = " + bench_fun + "()")    
 
         df_result = pd.DataFrame(
             0,
@@ -129,8 +131,7 @@ if __name__ == "__main__":
             optimizer = tf.optimizers.Adam(learning_rate=args.learning_rate)
             
             ###model
-            generator = Generator(get_data_shape(x))
-            kernels = [create_rbf(get_data_shape(x)), create_se_per(get_data_shape(x))] * args.n_kernels
+            kernels = [create_rbf(get_data_shape(x)), create_se_per(get_data_shape(x))]
             fix_kernel_variance(kernels)
 
             gps = []
@@ -141,7 +142,21 @@ if __name__ == "__main__":
             selector = HorseshoeSelector(dim=len(gps))
             likelihood = Gaussian()
             model = StructuralSVGP(gps, selector, likelihood)
+            
+            train_loss = model.training_loss_closure((x, y))         
+
+            @tf.function
+            def optimize_step():
+                optimizer.minimize(
+                    train_loss,
+                    model.trainable_variables)
         
+            for i in range(50000):
+                optimize_step()
+                model.selector.update_tau_lambda()
+                if i%100 == 0:
+                    print("Iter {} \t Loss: {}".format(i, tf.squeeze(train_loss()).numpy()))
+                
             #Bayesian Optimization iteration
             for tries in range(args.num_trial):
                 model.num_data = len(y)
@@ -153,15 +168,13 @@ if __name__ == "__main__":
                     optimizer.minimize(
                         train_loss,
                         model.trainable_variables)
-                    
-                prev_loss = train_loss().numpy()
-                
+                                    
                 # optimize GP
-                while train_loss() + 1 < prev_loss:
-                    prev_loss = train_loss().numpy()
-                    for step in range(args.num_step):
-                        optimize_step()
-                        
+                for step in range(args.num_step):
+                    optimize_step()
+                    model.selector.update_tau_lambda()
+
+
                 x_new = acq_max(
                     obj_fun.lower_bound,
                     obj_fun.upper_bound,
@@ -171,6 +184,7 @@ if __name__ == "__main__":
 
                 #Evaluation of new points
                 y_new = tf.expand_dims(obj_fun(x_new), 1)
+                print(y_new.numpy())
 
                 x = tf.concat([x, x_new], 0)
                 y = tf.concat([y, y_new], 0)
