@@ -56,7 +56,7 @@ parser.add_argument('--num_trial', '-t', type = int, default = 200, help = "Numb
 
 parser.add_argument('--num_init', '-n', type = int, default = 10,
                     help = "Number of runs for each benchmark function to change intial points randomly.")
-parser.add_argument('--learning_rate', '-l', type = float, default = 0.1, help = "learning rate in Adam optimizer")
+parser.add_argument('--learning_rate', '-l', type = float, default = 1, help = "learning rate in Adam optimizer")
 parser.add_argument('--num_step', '-s', type = int, default = 10, help = "number of steps in each BO iteration")
 
 args = parser.parse_args()
@@ -121,7 +121,7 @@ if __name__ == "__main__":
 
             ###number of inducing variables
             inducing_point = obj_fun.lower_bound +  tf.random.uniform(
-                (200, obj_fun.dim),
+                (50, obj_fun.dim),
                 dtype=tf.dtypes.float64
             ) * (obj_fun.upper_bound - obj_fun.lower_bound)
             
@@ -153,13 +153,15 @@ if __name__ == "__main__":
                     optimizer.minimize(
                         train_loss,
                         model.trainable_variables)
+                    
+                prev_loss = train_loss().numpy()
                 
                 # optimize GP
-                while train_loss() > 80:
+                while train_loss() + 1 < prev_loss:
+                    prev_loss = train_loss().numpy()
                     for step in range(args.num_step):
                         optimize_step()
-                        model.selector.update_tau_lambda()
-
+                        
                 x_new = acq_max(
                     obj_fun.lower_bound,
                     obj_fun.upper_bound,

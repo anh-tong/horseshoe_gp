@@ -146,19 +146,22 @@ if __name__ == "__main__":
             for tries in range(args.num_trial):
                 model.num_data = len(y)
                 
-                train_loss = model.training_loss_closure((x, y))
+                train_loss = model.training_loss_closure((x, y))         
                 
                 @tf.function
                 def optimize_step():
                     optimizer.minimize(
                         train_loss,
                         model.trainable_variables)
+                    
+                prev_loss = train_loss().numpy()
                 
                 # optimize GP
-                while train_loss() > 80:
+                while train_loss() + 1 < prev_loss:
+                    prev_loss = train_loss().numpy()
                     for step in range(args.num_step):
                         optimize_step()
-                        model.selector.update_tau_lambda()
+                    print(prev_loss)
 
                 x_new = acq_max(
                     obj_fun.lower_bound,
