@@ -55,7 +55,7 @@ parser.add_argument('--num_trial', '-t', type = int, default = 200, help = "Numb
 parser.add_argument('--num_init', '-n', type = int, default = 10,
                     help = "Number of runs for each benchmark function to change intial points randomly.")
 parser.add_argument('--learning_rate', '-l', type = float, default = 0.1, help = "learning rate in Adam optimizer")
-parser.add_argument('--num_step', '-u', type = int, default = 100, help = "number of steps in each BO iteration")
+parser.add_argument('--num_step', '-u', type = int, default = 1000, help = "number of steps in each BO iteration")
 
 args = parser.parse_args()
 #-------------------------argparse-------------------------
@@ -71,7 +71,7 @@ from src.kernels import create_rbf
 
 from utils import get_data_shape
 
-def acq_max(lb, ub, sur_model, y_max, acq_fun, n_warmup = 10000, iteration = 10):
+def acq_max(lb, ub, sur_model, y_max, acq_fun, n_warmup = 10000):
     
     x_tries = tf.random.uniform(
         [n_warmup, obj_fun.dim],
@@ -129,23 +129,34 @@ if __name__ == "__main__":
                 data=(x, y),
                 kernel=create_rbf(get_data_shape(x)),
                 mean_function=None)
+            
+            train_loss = model.training_loss_closure()
+
+            @tf.function
+            def optimize_step():
+                optimizer.minimize(
+                    train_loss,
+                    model.trainable_variables)
+            
+            optimizer = tf.optimizers.Adam(args.learning_rate)
+        
+            for i in range(50000):
+                optimize_step()
 
             #Bayesian Optimization iteration
             for tries in range(args.num_trial):
                 model.data = (x,y)
                 
                 train_loss = model.training_loss_closure()
-                prev_loss = train_loss().numpy()
-                
+      
                 @tf.function
                 def optimize_step():
                     optimizer.minimize(
                         train_loss,
                         model.trainable_variables)
 
-                #for step in range(args.num_step):
-                #    optimize_step()
-                for step in range(args.num_step):
+                # optimize GP
+                for i in range(args.num_step):
                     optimize_step()
                 
                 x_new = acq_max(
@@ -157,7 +168,6 @@ if __name__ == "__main__":
 
                 #Evaluation of new points
                 y_new = tf.expand_dims(obj_fun(x_new), 1)
-                print(y_new.numpy())
 
                 x = tf.concat([x, x_new], 0)
                 y = tf.concat([y, y_new], 0)
