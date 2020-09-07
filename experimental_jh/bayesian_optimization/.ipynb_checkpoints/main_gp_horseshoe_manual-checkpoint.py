@@ -14,10 +14,7 @@ from gpflow.kernels import RBF
 from src.experiment_tf import init_inducing_points
 from src.sparse_selector_tf import HorseshoeSelector
 from src.structural_sgp_tf import StructuralSVGP
-from src.kernel_generator_tf import Generator
 from src.experiment_tf import fix_kernel_variance
-
-#from gpflow.mean_functions import Zero
 
 import tensorflow as tf
 tf.random.set_seed(2020)
@@ -64,10 +61,6 @@ from utils import branin_rcos, six_hump_camel_back, goldstein_price, rosenbrock,
 
 exec("from utils import " + args.acq_fun)
 exec("acq_fun = " + args.acq_fun + "()")
-
-from utils import get_data_shape
-
-from src.kernels import create_rbf, create_se_per
 
 def acq_max(lb, ub, sur_model, y_max, acq_fun, n_warmup = 10000, iteration = 10):
     x_tries = tf.random.uniform(
@@ -117,21 +110,24 @@ if __name__ == "__main__":
 
             df_result.loc[0, num_test] = y_start
 
-            ###number of inducing variables
-            inducing_point = obj_fun.lower_bound +  tf.random.uniform(
-                (args.num_inducing, obj_fun.dim),
-                dtype=tf.dtypes.float64
-            ) * (obj_fun.upper_bound - obj_fun.lower_bound)
+            
+            
             
             #Initialize Optimizer
             #optimizer = tf.optimizers.Adam(learning_rate=args.learning_rate)
             
             ###model
-            kernels = [create_rbf(get_data_shape(x)), create_se_per(get_data_shape(x))]
+            kernels = [gpflow.kernels.SquaredExponential(), gpflow.kernels.Matern52()]
             fix_kernel_variance(kernels)
 
             gps = []
             for kernel in kernels:
+                ###number of inducing variables
+                inducing_point = obj_fun.lower_bound +  tf.random.uniform(
+                    (args.num_inducing, obj_fun.dim),
+                    dtype=tf.dtypes.float64
+                ) * (obj_fun.upper_bound - obj_fun.lower_bound)
+                
                 gp = SVGP(kernel, likelihood=None, inducing_variable=inducing_point)
                 gps.append(gp)
                 

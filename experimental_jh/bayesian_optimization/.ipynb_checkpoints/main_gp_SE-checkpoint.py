@@ -61,10 +61,6 @@ from utils import branin_rcos, six_hump_camel_back, goldstein_price, rosenbrock,
 exec("from utils import " + args.acq_fun)
 exec("acq_fun = " + args.acq_fun + "()")
 
-from src.kernels import create_rbf
-
-from utils import get_data_shape
-
 def acq_max(lb, ub, sur_model, y_max, acq_fun, n_warmup = 10000):
     
     x_tries = tf.random.uniform(
@@ -123,7 +119,7 @@ if __name__ == "__main__":
             ###model
             model = gpflow.models.GPR(
                 data=(x, y),
-                kernel=create_rbf(get_data_shape(x)),
+                kernel=gpflow.kernels.SquaredExponential(),
                 mean_function=None)
             
             train_loss = model.training_loss_closure()
