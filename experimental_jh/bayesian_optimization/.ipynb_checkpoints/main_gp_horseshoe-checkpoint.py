@@ -11,6 +11,12 @@ from gpflow.models import SVGP, BayesianModel
 from gpflow.likelihoods import Gaussian
 from gpflow.kernels import RBF
 
+from src.experiment_tf import init_inducing_points
+from src.sparse_selector_tf import HorseshoeSelector
+from src.structural_sgp_tf import StructuralSVGP
+from src.kernel_generator_tf import Generator
+from src.experiment_tf import fix_kernel_variance
+
 #from gpflow.mean_functions import Zero
 
 import tensorflow as tf
@@ -27,16 +33,6 @@ import argparse
 parser = argparse.ArgumentParser()
 
 parser.add_argument('--show_plot', '-v', type = bool, default = True)
-
-###This is argument for selector, but not used in baseline
-parser.add_argument('--selector', '-s',
-choices=["TrivialSelector", "SpikeAndSlabSelector", "HorseshoeSelector"],
-help='''
-Selectors:
-TrivialSelector
-SpikeAndSlabSelector
-HorseshoeSelector
-''', default = "HorseshoeSelector")
 
 ###This parts is not used in Baseline
 parser.add_argument('--num_inducing', '-i', type = int, default = 10)
@@ -60,8 +56,9 @@ parser.add_argument('--num_trial', '-t', type = int, default = 200, help = "Numb
 
 parser.add_argument('--num_init', '-n', type = int, default = 10,
                     help = "Number of runs for each benchmark function to change intial points randomly.")
-parser.add_argument('--learning_rate', '-l', type = float, default = 0.01, help = "learning rate in Adam optimizer")
-parser.add_argument('--num_step', '-u', type = int, default = 100, help = "number of steps in each BO iteration")
+parser.add_argument('--learning_rate', '-l', type = float, default = 0.1, help = "learning rate in Adam optimizer")
+parser.add_argument('--num_init_step', '-u', type = int, default = 5000, help = "number of steps in each BO iteration")
+parser.add_argument('--num_step', '-s', type = int, default = 100, help = "number of steps in each BO iteration")
 
 args = parser.parse_args()
 #-------------------------argparse-------------------------
@@ -73,9 +70,6 @@ from utils import branin_rcos, six_hump_camel_back, goldstein_price, rosenbrock,
 exec("from utils import " + args.acq_fun)
 exec("acq_fun = " + args.acq_fun + "()")
 
-from src.sparse_selector_tf import HorseshoeSelector
-from src.structural_sgp_tf import StructuralSVGP
-from src.kernel_generator_tf import Generator
 
 from utils import get_data_shape
 
@@ -92,33 +86,8 @@ def acq_max(lb, ub, sur_model, y_max, acq_fun, n_warmup = 10000, iteration = 10)
     
     if tf.reduce_max(ys) > y_max:
         y_max = tf.reduce_max(ys)
-        
-    for iterate in range(iteration):
-        locs = tf.random.uniform(
-            [1, obj_fun.dim],
-            dtype=tf.dtypes.float64) * (ub - lb) + lb
-        var_locs = tf.Variable(locs)
-        
-        optimizer = tf.keras.optimizers.Adam()
-        optimizer.minimize(
-            lambda: -acq_fun(
-                x = tf.clip_by_value(tf.reshape(var_locs, (1, -1)), lb, ub),
-                model = sur_model,
-                ymax = y_max),
-            [var_locs]
-        )
-        
-        loc_res = var_locs
-        obj_res = acq_fun(
-            x = tf.clip_by_value(tf.reshape(loc_res, (1, -1)), lb, ub),
-            model=sur_model,
-            ymax=y_max)
-
-        if max_acq is None or obj_res >= max_acq:
-            x_max = loc_res
-            max_acq = obj_res
             
-    return x_max
+    return tf.clip_by_value(x_max, lb, ub)
 
 
 #main
@@ -127,7 +96,7 @@ if __name__ == "__main__":
     ###Result directory
     save_file = "./GP_Horseshoe/"
     
-    for bench_fun in [branin_rcos, six_hump_camel_back, goldstein_price, rosenbrock]:
+    for bench_fun in [hartman_6, Styblinski_Tang, Michalewicz]:
         obj_fun = bench_fun()
 
         df_result = pd.DataFrame(
@@ -151,21 +120,19 @@ if __name__ == "__main__":
             df_result.loc[0, num_test] = y_start
 
             ###number of inducing variables
-            n_inducing = args.num_inducing
-            inducing_point = tf.random.uniform(
-                (10, obj_fun.dim),
+            inducing_point = obj_fun.lower_bound +  tf.random.uniform(
+                (50, obj_fun.dim),
                 dtype=tf.dtypes.float64
-            )
-
-            #Initialize Optimizer
-            optimizer = tf.optimizers.Adam(
-                learning_rate=args.learning_rate)
+            ) * (obj_fun.upper_bound - obj_fun.lower_bound)
             
-            ###model            
+            #Initialize Optimizer
+            optimizer = tf.optimizers.Adam(learning_rate=args.learning_rate)
+            
+            ###model
             generator = Generator(get_data_shape(x))
             kernels = generator.create_upto(args.n_kernels)
-            #kernels = [RBF(), Periodic2(), Product([RBF(), Periodic2()])] * args.n_kernels
-            
+            fix_kernel_variance(kernels)
+
             gps = []
             for kernel in kernels:
                 gp = SVGP(kernel, likelihood=None, inducing_variable=inducing_point)
@@ -173,20 +140,29 @@ if __name__ == "__main__":
                 
             selector = HorseshoeSelector(dim=len(gps))
             likelihood = Gaussian()
-            model = StructuralSVGP(gps, selector, likelihood, n_inducing)
+            model = StructuralSVGP(gps, selector, likelihood)
         
             #Bayesian Optimization iteration
-            for tries in range(args.num_trial):      
+            for tries in range(args.num_trial):
+                model.num_data = len(y)
 
+                train_loss = model.training_loss_closure((x, y))
+                
                 @tf.function
                 def optimize_step():
                     optimizer.minimize(
-                        model.training_loss_closure((x, y)),
+                        train_loss,
                         model.trainable_variables)
-                    
-                for step in range(args.num_step):
-                    optimize_step()
-                    model.selector.update_tau_lambda()
+                
+                # optimize GP
+                if tries == 0:
+                    for step in range(args.num_init_step):
+                        optimize_step()
+                        model.selector.update_tau_lambda()
+                else:
+                    for step in range(args.num_step):
+                        optimize_step()
+                        model.selector.update_tau_lambda()
 
                 x_new = acq_max(
                     obj_fun.lower_bound,
@@ -204,6 +180,7 @@ if __name__ == "__main__":
                 #Result
                 y_end = tf.reduce_min(y, axis=0).numpy()
                 df_result.loc[tries + 1, num_test] = y_end
+                
 
             print(bench_fun.__name__ + "-test %d: %f->%f" %(num_test + 1, y_start, y_end))
             num_test += 1

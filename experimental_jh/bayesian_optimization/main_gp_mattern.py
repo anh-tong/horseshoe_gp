@@ -36,12 +36,6 @@ HorseshoeSelector
 parser.add_argument('--num_inducing', '-i', type = int, default = 10)
 parser.add_argument('--n_kernels', '-k', type = int, default = 5)
 
-"""
-parser.add_argument('--bench_fun', '-b',
-choices=["branin_rcos", "six_hump_camel_back", "goldstein_price", "rosenbrock", "hartman_6"],
-default="branin_rcos")
-"""
-
 parser.add_argument('--acq_fun', '-a',
 choices=["EI", "UCB", "POI"],
 help='''
@@ -67,10 +61,6 @@ from utils import branin_rcos, six_hump_camel_back, goldstein_price, rosenbrock,
 exec("from utils import " + args.acq_fun)
 exec("acq_fun = " + args.acq_fun + "()")
 
-from src.kernels import create_rbf
-
-from utils import get_data_shape
-
 def acq_max(lb, ub, sur_model, y_max, acq_fun, n_warmup = 10000):
     
     x_tries = tf.random.uniform(
@@ -94,7 +84,9 @@ def acq_max(lb, ub, sur_model, y_max, acq_fun, n_warmup = 10000):
 if __name__ == "__main__":
     
     ###Result directory
-    save_file = "./GP_SE/"
+    save_file = "./GP_mattern_" + str(args.num_init) + "/"
+    if not os.path.exists(save_file):
+        os.mkdir(save_file)
     
     for bench_fun in [branin_rcos, six_hump_camel_back, goldstein_price, rosenbrock, hartman_6, Styblinski_Tang, Michalewicz]:
         obj_fun = bench_fun()
@@ -127,7 +119,7 @@ if __name__ == "__main__":
             ###model
             model = gpflow.models.GPR(
                 data=(x, y),
-                kernel=create_rbf(get_data_shape(x)),
+                kernel=gpflow.kernels.Matern52(),
                 mean_function=None)
             
             train_loss = model.training_loss_closure()
