@@ -14,10 +14,8 @@ from gpflow.kernels import RBF
 from src.experiment_tf import init_inducing_points
 from src.sparse_selector_tf import HorseshoeSelector
 from src.structural_sgp_tf import StructuralSVGP
-from src.kernel_generator_tf import Generator
 from src.experiment_tf import fix_kernel_variance
-
-#from gpflow.mean_functions import Zero
+from src.kernels import create_rbf, additive
 
 import tensorflow as tf
 tf.random.set_seed(2020)
@@ -27,6 +25,8 @@ tf.autograph.set_verbosity(1)
 import numpy as np
 import pandas as pd
 
+from utils import branin_rcos, six_hump_camel_back, goldstein_price, rosenbrock, hartman_6,  Styblinski_Tang, Michalewicz
+from utils import get_data_shape
 
 #-------------------------argparse-------------------------
 import argparse
@@ -35,14 +35,8 @@ parser = argparse.ArgumentParser()
 parser.add_argument('--show_plot', '-v', type = bool, default = True)
 
 ###This parts is not used in Baseline
-parser.add_argument('--num_inducing', '-i', type = int, default = 10)
+parser.add_argument('--num_inducing', '-i', type = int, default = 50)
 parser.add_argument('--n_kernels', '-k', type = int, default = 2)
-
-"""
-parser.add_argument('--bench_fun', '-b',
-choices=["branin_rcos", "six_hump_camel_back", "goldstein_price", "rosenbrock", "hartman_6"],
-default="branin_rcos")
-"""
 
 parser.add_argument('--acq_fun', '-a',
 choices=["EI", "UCB", "POI"],
@@ -52,40 +46,32 @@ UCB: Upper Confidence Bound
 POI: Probability of Improvement
 ''', default = "EI")
 
-parser.add_argument('--num_trial', '-t', type = int, default = 200, help = "Number of Bayesian Optimization Interations")
+parser.add_argument('--num_trial', '-s', type = int, default = 200, help = "Number of Bayesian Optimization Interations")
 
 parser.add_argument('--num_init', '-n', type = int, default = 10,
                     help = "Number of runs for each benchmark function to change intial points randomly.")
 parser.add_argument('--learning_rate', '-l', type = float, default = 0.1, help = "learning rate in Adam optimizer")
-parser.add_argument('--num_init_step', '-u', type = int, default = 5000, help = "number of steps in each BO iteration")
-parser.add_argument('--num_step', '-s', type = int, default = 100, help = "number of steps in each BO iteration")
+parser.add_argument('--num_step', '-t', type = int, default = 1000, help = "number of steps in each BO iteration")
+
+parser.add_argument('--bench_fun_list', '-b', nargs='+')
 
 args = parser.parse_args()
-#-------------------------argparse-------------------------
-
-#exec("from utils import " + args.bench_fun)
-#exec("bench_fun = " + args.bench_fun)
-from utils import branin_rcos, six_hump_camel_back, goldstein_price, rosenbrock, hartman_6,  Styblinski_Tang, Michalewicz
 
 exec("from utils import " + args.acq_fun)
 exec("acq_fun = " + args.acq_fun + "()")
+#-------------------------argparse-------------------------
 
-
-from utils import get_data_shape
-
-def acq_max(lb, ub, sur_model, y_max, acq_fun, n_warmup = 10000, iteration = 10):
+def acq_max(lb, ub, sur_model, y_min, acq_fun, n_warmup = 10000):
+    
     x_tries = tf.random.uniform(
         [n_warmup, obj_fun.dim],
         dtype=tf.dtypes.float64) * (ub - lb) + lb
-    ys = acq_fun(
+    acqs = acq_fun(
         x = x_tries,
         model = sur_model,
-        ymax = y_max)
-    x_max = tf.expand_dims(x_tries[tf.squeeze(tf.argmax(ys))], 0)
-    max_acq = tf.reduce_max(ys)
-    
-    if tf.reduce_max(ys) > y_max:
-        y_max = tf.reduce_max(ys)
+        ymax = -y_min)
+
+    x_max = tf.expand_dims(x_tries[tf.squeeze(tf.argmax(acqs))], 0)
             
     return tf.clip_by_value(x_max, lb, ub)
 
@@ -94,10 +80,12 @@ def acq_max(lb, ub, sur_model, y_max, acq_fun, n_warmup = 10000, iteration = 10)
 if __name__ == "__main__":
     
     ###Result directory
-    save_file = "./GP_Horseshoe/"
-    
-    for bench_fun in [hartman_6, Styblinski_Tang, Michalewicz]:
-        obj_fun = bench_fun()
+    save_file = "./result/GP_Horseshoe_manual_" + str(args.num_init) + "/"
+    if not os.path.exists(save_file):
+        os.mkdir(save_file)
+
+    for bench_fun in args.bench_fun_list[0].split(','):
+        exec("obj_fun = %s()" %bench_fun)
 
         df_result = pd.DataFrame(
             0,
@@ -112,40 +100,55 @@ if __name__ == "__main__":
                 (10, obj_fun.dim),
                 dtype=tf.dtypes.float64
             )
-            x = x * (obj_fun.upper_bound -obj_fun.lower_bound) + obj_fun.lower_bound
+            x = x * (obj_fun.upper_bound - obj_fun.lower_bound) + obj_fun.lower_bound
             y = tf.expand_dims(obj_fun(x), 1)
 
             y_start = tf.reduce_min(y, axis=0).numpy()
 
             df_result.loc[0, num_test] = y_start
-
-            ###number of inducing variables
-            inducing_point = obj_fun.lower_bound +  tf.random.uniform(
-                (50, obj_fun.dim),
-                dtype=tf.dtypes.float64
-            ) * (obj_fun.upper_bound - obj_fun.lower_bound)
-            
-            #Initialize Optimizer
-            optimizer = tf.optimizers.Adam(learning_rate=args.learning_rate)
             
             ###model
-            generator = Generator(get_data_shape(x))
-            kernels = generator.create_upto(args.n_kernels)
+            kernels = additive(create_rbf, get_data_shape(x), num_active_dims_per_kernel=1)
+            #kernels = [
+            #    gpflow.kernels.SquaredExponential(),
+            #    gpflow.kernels.Matern52()
+            #]
             fix_kernel_variance(kernels)
 
             gps = []
             for kernel in kernels:
+                ###number of inducing variables
+                inducing_point = obj_fun.lower_bound +  tf.random.uniform(
+                    (args.num_inducing, obj_fun.dim),
+                    dtype=tf.dtypes.float64
+                ) * (obj_fun.upper_bound - obj_fun.lower_bound)
+                
                 gp = SVGP(kernel, likelihood=None, inducing_variable=inducing_point)
                 gps.append(gp)
                 
             selector = HorseshoeSelector(dim=len(gps))
             likelihood = Gaussian()
             model = StructuralSVGP(gps, selector, likelihood)
+            
+            train_loss = model.training_loss_closure((x, y))
+
+            @tf.function
+            def optimize_step():
+                optimizer.minimize(
+                    train_loss,
+                    model.trainable_variables)
+            
+             #Initialize Optimizer
+            optimizer = tf.optimizers.Adam(args.learning_rate)
         
+            for i in range(50000):
+                optimize_step()
+                model.selector.update_tau_lambda()
+
             #Bayesian Optimization iteration
             for tries in range(args.num_trial):
                 model.num_data = len(y)
-
+                
                 train_loss = model.training_loss_closure((x, y))
                 
                 @tf.function
@@ -153,22 +156,17 @@ if __name__ == "__main__":
                     optimizer.minimize(
                         train_loss,
                         model.trainable_variables)
-                
+                                    
                 # optimize GP
-                if tries == 0:
-                    for step in range(args.num_init_step):
-                        optimize_step()
-                        model.selector.update_tau_lambda()
-                else:
-                    for step in range(args.num_step):
-                        optimize_step()
-                        model.selector.update_tau_lambda()
+                for i in range(args.num_step):
+                    optimize_step()
+                    model.selector.update_tau_lambda()
 
                 x_new = acq_max(
                     obj_fun.lower_bound,
                     obj_fun.upper_bound,
                     model,
-                    tf.reduce_max(y),
+                    tf.reduce_min(y),
                     acq_fun)
 
                 #Evaluation of new points
@@ -181,8 +179,7 @@ if __name__ == "__main__":
                 y_end = tf.reduce_min(y, axis=0).numpy()
                 df_result.loc[tries + 1, num_test] = y_end
                 
-
-            print(bench_fun.__name__ + "-test %d: %f->%f" %(num_test + 1, y_start, y_end))
+            print(bench_fun + "-test %d: %f->%f" %(num_test + 1, y_start, y_end))
             num_test += 1
 
-        df_result.to_csv(save_file + args.acq_fun + "_" + bench_fun.__name__ + ".csv")
+        df_result.to_csv(save_file + args.acq_fun + "_" + bench_fun + ".csv")

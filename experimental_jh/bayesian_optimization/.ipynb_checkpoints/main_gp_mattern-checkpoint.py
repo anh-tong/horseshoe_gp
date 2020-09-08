@@ -14,23 +14,29 @@ tf.get_logger().setLevel('ERROR')
 import numpy as np
 import pandas as pd
 
-from scipy.optimize import Bounds, minimize
+import os
+os.environ['TF_CPP_MIN_LOG_LEVEL'] = '3' 
+
+import sys
+sys.path.append("../..")
+
+
+import gpflow
+
+import tensorflow as tf
+tf.random.set_seed(2020)
+tf.get_logger().setLevel('ERROR')
+
+import numpy as np
+import pandas as pd
+
+from utils import branin_rcos, six_hump_camel_back, goldstein_price, rosenbrock, hartman_6, Styblinski_Tang, Michalewicz
 
 #-------------------------argparse-------------------------
 import argparse
 parser = argparse.ArgumentParser()
 
 parser.add_argument('--show_plot', '-v', type = bool, default = True)
-
-###This is argument for selector, but not used in baseline
-parser.add_argument('--selector', '-s',
-choices=["TrivialSelector", "SpikeAndSlabSelector", "HorseshoeSelector"],
-help='''
-Selectors:
-TrivialSelector
-SpikeAndSlabSelector
-HorseshoeSelector
-''', default = "HorseshoeSelector")
 
 ###This parts is not used in Baseline
 parser.add_argument('--num_inducing', '-i', type = int, default = 10)
@@ -44,7 +50,7 @@ UCB: Upper Confidence Bound
 POI: Probability of Improvement
 ''', default = "EI")
 
-parser.add_argument('--num_trial', '-t', type = int, default = 200, help = "Number of Bayesian Optimization Interations")
+parser.add_argument('--num_trial', '-s', type = int, default = 200, help = "Number of Bayesian Optimization Interations")
 
 parser.add_argument('--num_init', '-n', type = int, default = 10,
                     help = "Number of runs for each benchmark function to change intial points randomly.")
@@ -52,30 +58,22 @@ parser.add_argument('--learning_rate', '-l', type = float, default = 0.1, help =
 parser.add_argument('--num_step', '-u', type = int, default = 1000, help = "number of steps in each BO iteration")
 
 args = parser.parse_args()
-#-------------------------argparse-------------------------
-
-#exec("from utils import " + args.bench_fun)
-#exec("bench_fun = " + args.bench_fun)
-from utils import branin_rcos, six_hump_camel_back, goldstein_price, rosenbrock, hartman_6, Styblinski_Tang, Michalewicz
 
 exec("from utils import " + args.acq_fun)
 exec("acq_fun = " + args.acq_fun + "()")
+#-------------------------argparse-------------------------
 
-def acq_max(lb, ub, sur_model, y_max, acq_fun, n_warmup = 10000):
+def acq_max(lb, ub, sur_model, y_min, acq_fun, n_warmup = 10000):
     
     x_tries = tf.random.uniform(
         [n_warmup, obj_fun.dim],
         dtype=tf.dtypes.float64) * (ub - lb) + lb
-    ys = acq_fun(
+    acqs = acq_fun(
         x = x_tries,
         model = sur_model,
-        ymax = y_max)
+        ymax = -y_min)
 
-    x_max = tf.expand_dims(x_tries[tf.squeeze(tf.argmax(ys))], 0)
-    max_acq = tf.reduce_max(ys)
-    
-    if tf.reduce_max(ys) > y_max:
-        y_max = tf.reduce_max(ys)
+    x_max = tf.expand_dims(x_tries[tf.squeeze(tf.argmax(acqs))], 0)
             
     return tf.clip_by_value(x_max, lb, ub)
 
@@ -84,7 +82,7 @@ def acq_max(lb, ub, sur_model, y_max, acq_fun, n_warmup = 10000):
 if __name__ == "__main__":
     
     ###Result directory
-    save_file = "./GP_mattern_" + str(args.num_init) + "/"
+    save_file = "./result/GP_mattern_" + str(args.num_init) + "/"
     if not os.path.exists(save_file):
         os.mkdir(save_file)
     
@@ -150,12 +148,12 @@ if __name__ == "__main__":
                 # optimize GP
                 for i in range(args.num_step):
                     optimize_step()
-                
+
                 x_new = acq_max(
                     obj_fun.lower_bound,
                     obj_fun.upper_bound,
                     model,
-                    tf.reduce_max(y),
+                    tf.reduce_min(y),
                     acq_fun)
 
                 #Evaluation of new points

@@ -15,6 +15,7 @@ from src.experiment_tf import init_inducing_points
 from src.sparse_selector_tf import HorseshoeSelector
 from src.structural_sgp_tf import StructuralSVGP
 from src.experiment_tf import fix_kernel_variance
+#from src.kernels import create_rbf, additive
 
 import tensorflow as tf
 tf.random.set_seed(2020)
@@ -24,6 +25,8 @@ tf.autograph.set_verbosity(1)
 import numpy as np
 import pandas as pd
 
+from utils import branin_rcos, six_hump_camel_back, goldstein_price, rosenbrock, hartman_6,  Styblinski_Tang, Michalewicz
+#from utils import get_data_shape
 
 #-------------------------argparse-------------------------
 import argparse
@@ -43,38 +46,32 @@ UCB: Upper Confidence Bound
 POI: Probability of Improvement
 ''', default = "EI")
 
-parser.add_argument('--num_trial', '-t', type = int, default = 200, help = "Number of Bayesian Optimization Interations")
+parser.add_argument('--num_trial', '-s', type = int, default = 200, help = "Number of Bayesian Optimization Interations")
 
 parser.add_argument('--num_init', '-n', type = int, default = 10,
                     help = "Number of runs for each benchmark function to change intial points randomly.")
 parser.add_argument('--learning_rate', '-l', type = float, default = 0.1, help = "learning rate in Adam optimizer")
-parser.add_argument('--num_step', '-s', type = int, default = 1000, help = "number of steps in each BO iteration")
+parser.add_argument('--num_step', '-t', type = int, default = 1000, help = "number of steps in each BO iteration")
 
 parser.add_argument('--bench_fun_list', '-b', nargs='+')
 
 args = parser.parse_args()
-#-------------------------argparse-------------------------
-
-#exec("from utils import " + args.bench_fun)
-#exec("bench_fun = " + args.bench_fun)
-from utils import branin_rcos, six_hump_camel_back, goldstein_price, rosenbrock, hartman_6,  Styblinski_Tang, Michalewicz
 
 exec("from utils import " + args.acq_fun)
 exec("acq_fun = " + args.acq_fun + "()")
+#-------------------------argparse-------------------------
 
-def acq_max(lb, ub, sur_model, y_max, acq_fun, n_warmup = 10000, iteration = 10):
+def acq_max(lb, ub, sur_model, y_min, acq_fun, n_warmup = 10000):
+    
     x_tries = tf.random.uniform(
         [n_warmup, obj_fun.dim],
         dtype=tf.dtypes.float64) * (ub - lb) + lb
-    ys = acq_fun(
+    acqs = acq_fun(
         x = x_tries,
         model = sur_model,
-        ymax = y_max)
-    x_max = tf.expand_dims(x_tries[tf.squeeze(tf.argmax(ys))], 0)
-    max_acq = tf.reduce_max(ys)
-    
-    if tf.reduce_max(ys) > y_max:
-        y_max = tf.reduce_max(ys)
+        ymax = -y_min)
+
+    x_max = tf.expand_dims(x_tries[tf.squeeze(tf.argmax(acqs))], 0)
             
     return tf.clip_by_value(x_max, lb, ub)
 
@@ -83,7 +80,7 @@ def acq_max(lb, ub, sur_model, y_max, acq_fun, n_warmup = 10000, iteration = 10)
 if __name__ == "__main__":
     
     ###Result directory
-    save_file = "./GP_Horseshoe_manual_" + str(args.num_init) + "/"
+    save_file = "./result/GP_Horseshoe_manual_" + str(args.num_init) + "/"
     if not os.path.exists(save_file):
         os.mkdir(save_file)
 
@@ -109,15 +106,13 @@ if __name__ == "__main__":
             y_start = tf.reduce_min(y, axis=0).numpy()
 
             df_result.loc[0, num_test] = y_start
-
-            
-            
-            
-            #Initialize Optimizer
-            #optimizer = tf.optimizers.Adam(learning_rate=args.learning_rate)
             
             ###model
-            kernels = [gpflow.kernels.SquaredExponential(), gpflow.kernels.Matern52()]
+            #kernels = additive(create_rbf, get_data_shape(x), num_active_dims_per_kernel=1)
+            kernels = [
+                gpflow.kernels.SquaredExponential(),
+                gpflow.kernels.Matern52()
+            ]
             fix_kernel_variance(kernels)
 
             gps = []
@@ -143,6 +138,7 @@ if __name__ == "__main__":
                     train_loss,
                     model.trainable_variables)
             
+             #Initialize Optimizer
             optimizer = tf.optimizers.Adam(args.learning_rate)
         
             for i in range(50000):
@@ -170,7 +166,7 @@ if __name__ == "__main__":
                     obj_fun.lower_bound,
                     obj_fun.upper_bound,
                     model,
-                    tf.reduce_max(y),
+                    tf.reduce_min(y),
                     acq_fun)
 
                 #Evaluation of new points

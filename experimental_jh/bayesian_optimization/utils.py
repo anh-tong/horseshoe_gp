@@ -22,7 +22,7 @@ def get_data_shape(x):
     }
 
 
-###Acqusition Functions
+###Acqusition Functions for minimization
 class UCB:
     def __init__(self):
         self.norm = tfp.distributions.Normal(
@@ -32,7 +32,7 @@ class UCB:
     def __call__(self, x, model, ymax = None):
         mean, var = model.predict_f(x)
         #I put the value of 0.005 normal quantile
-        return tf.squeeze(mean + 2.807034 * tf.math.sqrt(var))
+        return tf.squeeze(-mean + 2.807034 * tf.math.sqrt(var))
 
 class EI:
     def __init__(self):
@@ -43,7 +43,7 @@ class EI:
     def __call__(self, x, model, ymax):
         mean, var = model.predict_f(x)
         std = tf.sqrt(var)
-        z = (mean - ymax) / std
+        z = (-mean - ymax) / std
         return tf.squeeze(std * (z * self.norm.cdf(z) + self.norm.prob(z)))
 
 class POI:
@@ -54,7 +54,7 @@ class POI:
         
     def __call__(self, x, model, ymax):
         mean, var = model.predict_f(x)        
-        z = (mean - ymax -0.01)/tf.sqrt(var)
+        z = (-mean - ymax -0.01)/tf.sqrt(var)
         return tf.squeeze(self.norm.cdf(z))
 
 ###Test Functions
@@ -187,7 +187,7 @@ class Michalewicz(test_fun):
             -9.66
         )
         self.dim = dim
-        self.const = tf.expand_dims(tf.constant(range(self.dim), dtype = tf.dtypes.float64), 0)
+        self.const = tf.expand_dims(1 + tf.constant(range(self.dim), dtype = tf.dtypes.float64), 0)
         
     def __call__(self, x):
         return -tf.reduce_sum(tf.math.sin(x) * tf.pow(tf.math.sin(tf.math.sin(self.const * tf.pow(x,2) / pi)), 20), axis = 1)
