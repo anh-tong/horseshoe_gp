@@ -80,7 +80,7 @@ def acq_max(lb, ub, sur_model, y_min, acq_fun, n_warmup = 10000):
 if __name__ == "__main__":
     
     ###Result directory
-    save_file = "./result/GP_Horseshoe_manual_" + str(args.num_init) + "/"
+    save_file = "./result/GP_Horseshoe_order1_" + str(args.num_init) + "/"
     if not os.path.exists(save_file):
         os.mkdir(save_file)
 
