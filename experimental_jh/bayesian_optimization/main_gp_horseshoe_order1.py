@@ -86,7 +86,7 @@ if __name__ == "__main__":
 
     for bench_fun in args.bench_fun_list[0].split(','):
         exec("obj_fun = %s()" %bench_fun)
-
+ 
         df_result = pd.DataFrame(
             0,
             index=range(args.num_trial+1),

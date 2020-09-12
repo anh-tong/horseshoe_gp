@@ -184,7 +184,7 @@ class Michalewicz(test_fun):
             tf.constant([0] * dim, dtype = tf.dtypes.float64),
             tf.constant(tf.repeat(tf.expand_dims(pi, axis = 0), dim, axis = 0), dtype = tf.dtypes.float64),
             tf.constant([(0) * dim], dtype = tf.dtypes.float64),
-            -9.66
+            -9.66015
         )
         self.dim = dim
         self.const = tf.expand_dims(1 + tf.constant(range(self.dim), dtype = tf.dtypes.float64), 0)
