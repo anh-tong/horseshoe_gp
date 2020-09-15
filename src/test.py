@@ -1,23 +1,21 @@
-import tensorflow as tf
-import gpflow as gf
+import matplotlib.pyplot as plt
 import numpy as np
+import tensorflow as tf
+from gpflow import set_trainable
 from gpflow.kernels import RBF
+from gpflow.likelihoods import Gaussian
 from gpflow.mean_functions import Zero
 from gpflow.models import SVGP
 from gpflow.optimizers import NaturalGradient
-from  gpflow.likelihoods import Gaussian, GaussianMC
-from src.sparse_selector import TrivialSparseSelector, SpikeAndSlabSelector, HorseshoeSelector, LinearSelector
+
+from src.sparse_selector import TrivialSparseSelector, SpikeAndSlabSelector, HorseshoeSelector
 from src.structural_sgp import StructuralSVGP
-from gpflow import set_trainable
 
 # tf.executing_eagerly()
 
-
-import matplotlib.pyplot as plt
-
 # toy data
 train_x = tf.linspace(0., 1., 100)[:, None]
-train_y = 3. * tf.cos(train_x * 2. * np.pi) + tf.random.normal((100,1)) * train_x ** 3
+train_y = 3. * tf.cos(train_x * 2. * np.pi) + tf.random.normal((100, 1)) * train_x ** 3
 
 train_x = tf.cast(train_x, tf.float64)
 train_y = tf.cast(train_y, tf.float64)
@@ -32,8 +30,8 @@ for i in range(n_kernels):
     gp = SVGP(kernel=kernel, mean_function=mean, likelihood=None, inducing_variable=Z)
     gps += [gp]
 
-def create_linear_data():
 
+def create_linear_data():
     np.random.seed(123)
     N = 100
     sparsity = 0.05
@@ -65,9 +63,9 @@ def test_trivial_model():
     model = StructuralSVGP(gps, selector, likelihood)
 
     minibatch_size = 100
-    train_dataset = tf.data.Dataset.\
-        from_tensor_slices((train_x, train_y)).\
-        repeat().\
+    train_dataset = tf.data.Dataset. \
+        from_tensor_slices((train_x, train_y)). \
+        repeat(). \
         shuffle(len(train_y))
     train_iter = iter(train_dataset.batch(minibatch_size))
     opt = tf.optimizers.Adam()
@@ -83,8 +81,7 @@ def test_trivial_model():
         if i % 10 == 0:
             print("Iter {}\t Loss{}".format(i, train_loss().numpy()))
 
-
-    test_x = tf.linspace(-0.1, 1.1, 100)[:,None]
+    test_x = tf.linspace(-0.1, 1.1, 100)[:, None]
     test_x = tf.cast(test_x, dtype=tf.float64)
     mean, var = model.predict_f(test_x)
 
@@ -93,19 +90,20 @@ def test_trivial_model():
     plt.fill_between(
         test_x[:, 0],
         mean[:, 0] - 1.96 * np.square(var[:, 0]),
-        mean[:, 0] + 1.96 * np.sqrt(var[:,0]),
+        mean[:, 0] + 1.96 * np.sqrt(var[:, 0]),
         color='C0',
-        alpha= 0.2
+        alpha=0.2
     )
     plt.show()
 
-def test_spike_and_slab():
 
+def test_spike_and_slab():
     ss = SpikeAndSlabSelector(dim=5)
     print(ss.entropy())
     print(ss.log_prior())
     print(ss.kl_divergence())
     print(ss.sample())
+
 
 def test_horseshoe():
     horseshoe = HorseshoeSelector(dim=5)
@@ -116,9 +114,8 @@ def test_horseshoe():
 
 
 def test_linear_regression_spike_and_slab():
-
     M, N, X_train, y_train, beta = create_linear_data()
-    spike_and_slab = SpikeAndSlabSelector(dim=M+1)
+    spike_and_slab = SpikeAndSlabSelector(dim=M + 1)
 
     def loss_closure():
         s2 = spike_and_slab.s2
@@ -127,8 +124,6 @@ def test_linear_regression_spike_and_slab():
         ll = -0.5 * N * tf.math.log(2. * np.pi * s2) - 0.5 * tf.reduce_sum(tf.square(y_train - tf.squeeze(y_mean))) / s2
         kl = spike_and_slab.kl_divergence()
         return - (ll - kl)
-
-
 
     optimizer = tf.optimizers.Adam()
 
@@ -167,9 +162,8 @@ def test_linear_regression_spike_and_slab():
 
 
 def test_linear_regression_horseshoe():
-
     M, N, X_train, y_train, beta = create_linear_data()
-    horseshoe = HorseshoeSelector(dim=M+1)
+    horseshoe = HorseshoeSelector(dim=M + 1)
 
     def loss_closure():
         s2 = horseshoe.s2
@@ -215,8 +209,8 @@ def test_linear_regression_horseshoe():
     fig.set_tight_layout(True)
     plt.show()
 
-def test_gp_natural_gradient(selector, func=None):
 
+def test_gp_natural_gradient(selector, func=None):
     likelihood = Gaussian()
     model = StructuralSVGP(gps, selector, likelihood)
     from gpflow import set_trainable
@@ -269,8 +263,8 @@ def test_gp_natural_gradient(selector, func=None):
     )
     plt.show()
 
-def test_gp(selector, func=None):
 
+def test_gp(selector, func=None):
     likelihood = Gaussian()
     model = StructuralSVGP(gps, selector, likelihood, num_data=100)
 
@@ -310,6 +304,7 @@ def test_gp(selector, func=None):
     )
     plt.show()
 
+
 def test_gp_double_opt(selector, func=None):
     likelihood = Gaussian()
     model = StructuralSVGP(gps, selector, likelihood, num_data=100)
@@ -330,7 +325,6 @@ def test_gp_double_opt(selector, func=None):
     gp_variable.append(likelihood.trainable_variables)
 
     train_loss = model.training_loss_closure(train_iter)
-
 
     @tf.function
     def optimize_step():
@@ -367,6 +361,7 @@ def test_gp_spike_and_slab():
 
 def test_gp_horseshoe():
     selector = HorseshoeSelector(n_kernels)
+
     def func():
         selector.update_tau_lambda()
 

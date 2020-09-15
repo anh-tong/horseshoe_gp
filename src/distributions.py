@@ -1,7 +1,7 @@
 import numpy as np
 import tensorflow as tf
-from gpflow.utilities import to_default_float
 from gpflow.config import default_float
+from gpflow.utilities import to_default_float
 
 
 class InverseGamma(object):

@@ -1,14 +1,15 @@
-import os
 import logging
+import os
 import time
+from typing import Tuple
+
 import numpy as np
-import tensorflow as tf
 import scipy.io as sio
+import tensorflow as tf
+from gpflow.utilities import to_default_float
 from sklearn.decomposition import PCA
 from sklearn.model_selection import train_test_split
-from gpflow.utilities import to_default_float
-from typing import Tuple, Dict
-import matplotlib
+
 
 class Dataset(object):
 
@@ -22,7 +23,6 @@ class Dataset(object):
 
     def preprocess(self, x, y):
         return x, y
-
 
     def data(self, test_size=0.1, random_state=123):
         x, y = self.retrieve()
@@ -38,10 +38,8 @@ class Dataset(object):
         self.y_train = to_default_float(y_train)
         self.y_test = to_default_float(y_test)
 
-
     def get_train(self) -> Tuple[tf.Tensor, tf.Tensor]:
         return self.x_train, self.y_train
-
 
     def get_test(self) -> Tuple[tf.Tensor, tf.Tensor]:
         return self.x_test, self.y_test
@@ -78,7 +76,6 @@ class ABCDDataset(Dataset):
         self.n = x.shape[0]
         self.d = x.shape[1]
         return x, y
-
 
 
 class UCIDataset(Dataset):
@@ -124,8 +121,6 @@ class UCIDataset(Dataset):
         self.y_train = to_default_float(y_train)
         self.y_test = to_default_float(y_test)
 
-
-
     def retrieve(self):
         data = np.loadtxt(self.data_dir)
         x, y = data[:, :-1], data[:, -1]
@@ -134,13 +129,13 @@ class UCIDataset(Dataset):
         self.d = x.shape[1]
         return x, y
 
+
 class NavalDataset(UCIDataset):
 
     def retrieve(self):
         x, y = super(NavalDataset, self).retrieve()
         x = np.delete(x, axis=1, obj=[8, 11])
         return x, y
-
 
 
 class GEFCOM(Dataset):
@@ -152,8 +147,8 @@ class GEFCOM(Dataset):
     def retrieve(self):
         data = sio.loadmat(self.data_dir)
         X = data["times"]
-        Y = data["loads"][:,0]
-        Y = Y[:,None]
+        Y = data["loads"][:, 0]
+        Y = Y[:, None]
         Y, _, _ = standardize(Y)
         self.n = X.shape[0]
         self.d = X.shape[1]
@@ -164,7 +159,6 @@ class GEFCOM(Dataset):
 
 
 def get_dataset(name) -> Dataset:
-
     if name == "airline":
         dataset = ABCDDataset("../data/01-airline.mat")
     elif name == "solar":
@@ -209,9 +203,8 @@ class ServoDataset(Dataset):
 
     def __init__(self, data_dir="../data/servo.mat"):
         self.data_dir = data_dir
-        self.std_y_train = 1. # no normalization in this data set
+        self.std_y_train = 1.  # no normalization in this data set
         super().__init__()
-
 
     def retrieve(self):
         data = sio.loadmat(self.data_dir)
@@ -220,6 +213,7 @@ class ServoDataset(Dataset):
         assert len(x.shape) == 2
         assert len(y.shape) == 2
         return x, y
+
 
 class PimaDataset(Dataset):
 
@@ -238,12 +232,12 @@ class PimaDataset(Dataset):
         assert len(y.shape) == 2
         return x, y
 
-class LiverDataset(PimaDataset):
 
+class LiverDataset(PimaDataset):
     pass
 
-class HeartDataset(PimaDataset):
 
+class HeartDataset(PimaDataset):
     pass
 
 
@@ -264,14 +258,15 @@ def get_data_shape_from_XY(X, Y):
 
     return data_shape
 
-def get_data_shape(dataset:ABCDDataset):
 
+def get_data_shape(dataset: ABCDDataset):
     X, Y = dataset.get_train()
     X, Y = X.numpy(), Y.numpy()
 
     data_shape = get_data_shape_from_XY(X, Y)
 
     return data_shape
+
 
 def standardize(data_train, *args):
     """
@@ -293,12 +288,13 @@ def standardize(data_train, *args):
     output.append(std)
     return output
 
+
 def makedirs(filename):
     if not os.path.exists(os.path.dirname(filename)):
         os.makedirs(os.path.dirname(filename))
 
-def create_logger(output_path, name, run_file):
 
+def create_logger(output_path, name, run_file):
     log_file = "{}_{}.log".format(name, time.strftime('%m-%d-%H-%M-%S'))
     head = '%(asctime)-15s %(message)s'
     filename = os.path.join(output_path, log_file)

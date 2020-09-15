@@ -1,11 +1,9 @@
-import numpy as np
 import tensorflow as tf
-import tensorflow_probability as tfp
 from gpflow import Module
 from gpflow.base import Parameter
 from gpflow.utilities import positive, to_default_float
 
-from src.distributions import Normal, LogNormal, InverseGamma
+from src.distributions import LogNormal, InverseGamma
 
 
 class BaseSparseSelector(Module):
@@ -39,13 +37,11 @@ class LinearSelector(BaseSparseSelector):
         super().__init__(dim)
         self.w = Parameter(tf.random.normal((self.dim, 1)))
 
-
     def kl_divergence(self):
         return tf.zeros(1, dtype=tf.float64)
 
     def sample(self):
         return self.w
-
 
 
 class HorseshoeSelector(BaseSparseSelector):
@@ -71,7 +67,6 @@ class HorseshoeSelector(BaseSparseSelector):
         self.q_phi_lambda = InverseGamma(shape=0.5 * tf.ones([self.dim, 1]),
                                          rate=tf.convert_to_tensor(B))
 
-
     def entropy(self):
         entropy_tau = self.q_tau.entropy()
         entropy_lambda = self.q_lambda.entropy()
@@ -80,12 +75,12 @@ class HorseshoeSelector(BaseSparseSelector):
         return entropy_tau + entropy_lambda
 
     def log_prior(self):
-
         def log_density_inverse_gamma(x: LogNormal, alpha, beta: InverseGamma):
             """log PDF of IG(x; alpha, 1/beta)"""
             ret = - alpha * beta.expect_log() - tf.math.lgamma(alpha) \
                   - (alpha + 1) * x.expect_log_x() - beta.expect_inverse() * x.expect_inverse()
             return ret
+
         half = to_default_float(0.5)
         log_prior_tau = log_density_inverse_gamma(self.q_tau, half, self.q_phi_tau)
         log_prior_lambda = log_density_inverse_gamma(self.q_lambda, half, self.q_phi_lambda)
@@ -114,4 +109,3 @@ class HorseshoeSelector(BaseSparseSelector):
         var = self.q_tau.var + self.q_lambda.var
         log_tau_lambda = mean + tf.sqrt(var) * tf.random.normal(shape=tf.shape(var), dtype=tf.float64)
         return tf.exp(0.5 * log_tau_lambda)
-

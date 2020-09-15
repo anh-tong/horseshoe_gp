@@ -6,10 +6,9 @@ from gpflow import set_trainable
 from gpflow.kernels import Periodic, Product
 from gpflow.likelihoods import Gaussian
 from gpflow.models import SVGP
-from gpflow.utilities import to_default_float
 
 from src.kernel_generator import Generator
-from src.kernels import create_rbf, create_period, additive, create_se_per
+from src.kernels import create_rbf, create_period
 from src.sparse_selector import HorseshoeSelector
 from src.structural_sgp import StructuralSVGP
 from src.utils import get_dataset, get_data_shape
@@ -58,7 +57,7 @@ def create_model(inducing_point, data_shape, num_data, selector="horseshoe", ker
     fix_kernel_variance(kernels)
     gps = []
     for kernel in kernels:
-        gp = SVGP(kernel, likelihood=None, inducing_variable=inducing_point, q_mu=np.random.randn(100,1))
+        gp = SVGP(kernel, likelihood=None, inducing_variable=inducing_point, q_mu=np.random.randn(100, 1))
         gps.append(gp)
 
     if selector == "horseshoe":
@@ -157,7 +156,6 @@ def train(model, train_iter, ckpt_dir, ckpt_freq=1000, n_iter=10000, lr=0.01, da
                 error = tf.concat(error, axis=0)
                 rmse = tf.sqrt(tf.reduce_mean(error))
                 print("Iter {} \t Loss: {:.2f} \t RMSE: {:.2f}".format(i, train_loss().numpy(), rmse.numpy()))
-
 
     return model
 
@@ -334,6 +332,5 @@ def run(date,
 
 
 def create_unique_name(date, dataset_name, kernel_order, repetition):
-    name = "{}_{}_kernel_{}{}".format(dataset_name, date,kernel_order, repetition)
+    name = "{}_{}_kernel_{}{}".format(dataset_name, date, kernel_order, repetition)
     return name
-

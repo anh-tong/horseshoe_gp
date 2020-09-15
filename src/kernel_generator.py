@@ -1,8 +1,9 @@
 import itertools
-from typing import List, Dict
+from typing import List
+
+from gpflow.kernels import Product, RBF, Kernel
 
 from src.kernels import create_rbf, create_period, create_linear
-from gpflow.kernels import Product, RBF, Kernel
 
 
 class Generator(object):

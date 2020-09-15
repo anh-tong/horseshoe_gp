@@ -71,16 +71,12 @@ class StructuralSVGP(BayesianModel, ExternalDataTrainingLossMixin):
         f_var = 0.2 * tf.add_n(vars)
         return f_mean, f_var
 
-
-
     def predict_y(self, Xnew, full_cov=False, full_output_cov=False):
         f_mean, f_var = self.predict_f(Xnew, full_cov, full_output_cov)
         return self.likelihood.predict_mean_and_var(f_mean, f_var)
 
-def truncate_small(x, eps=1e-2):
 
+def truncate_small(x, eps=1e-2):
     pos = 0.5 * (1. + tf.sign(x - eps)) * x
     neg = 0.5 * (1 + tf.sign(-x - eps)) * x
     return pos - neg
-
-
