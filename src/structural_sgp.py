@@ -29,7 +29,6 @@ class StructuralSVGP(BayesianModel, ExternalDataTrainingLossMixin):
     def elbo(self, data: RegressionData):
         X, Y = data
         f_mean, f_var = self.predict_f(X, full_cov=False, full_output_cov=False)
-        # f_var = tf.reshape(tf.linalg.diag_part(f_var), shape=tf.shape(f_mean))
         var_exp = self.likelihood.variational_expectations(f_mean, f_var, Y)
         kl = self.prior_kl()
         if self.num_data is not None:
@@ -49,11 +48,9 @@ class StructuralSVGP(BayesianModel, ExternalDataTrainingLossMixin):
         vars = []
         for i, gp in enumerate(self.gps):
             w_i = w[i]
-            # w_i = truncate_small(w_i)
             mean, var = gp.predict_f(Xnew, full_cov, full_output_cov)
             means += [mean * w_i]
             w2_i = w_i ** 2
-            # w2_i = tf.clip_by_value(w2_i, clip_value_min=1e-2, clip_value_max=1e3)
             vars += [var * w2_i]
 
         f_mean = tf.add_n(means)

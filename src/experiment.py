@@ -10,7 +10,7 @@ from gpflow.utilities import to_default_float
 
 from src.kernel_generator import Generator
 from src.kernels import create_rbf, create_period, additive, create_se_per
-from src.sparse_selector import HorseshoeSelector, SpikeAndSlabSelector
+from src.sparse_selector import HorseshoeSelector
 from src.structural_sgp import StructuralSVGP
 from src.utils import get_dataset, get_data_shape
 
@@ -54,8 +54,6 @@ def create_model(inducing_point, data_shape, num_data, selector="horseshoe", ker
     for _ in range(repetition):
         kernels.extend(generator.create_upto(upto_order=kernel_order))
 
-#    kernels = additive(create_se_per, data_shape=data_shape, num_active_dims_per_kernel=1)
-#    kernels.extend(additive(create_se_per, data_shape=data_shape, num_active_dims_per_kernel=1))
     print("NUMBER OF KERNELS: {}".format(len(kernels)))
     fix_kernel_variance(kernels)
     gps = []
@@ -65,10 +63,6 @@ def create_model(inducing_point, data_shape, num_data, selector="horseshoe", ker
 
     if selector == "horseshoe":
         selector = HorseshoeSelector(dim=len(gps))
-        # from src.sparse_selector_tf import TrivialSparseSelector
-        # selector = TrivialSparseSelector(len(gps))
-    elif selector == "spike_n_slab":
-        selector = SpikeAndSlabSelector(dim=len(gps))
     else:
         raise ValueError("Invalid selector name. Pick either [horseshoe] or [spike_n_slab]")
 
@@ -343,11 +337,3 @@ def create_unique_name(date, dataset_name, kernel_order, repetition):
     name = "{}_{}_kernel_{}{}".format(dataset_name, date,kernel_order, repetition)
     return name
 
-
-if __name__ == "__main__":
-    # run(date="0901", dataset_name="solar", lr=0.01, n_iter=10000) # TODO: have a problem running this
-    run(date="0831", dataset_name="airline")
-    # run(name="mauna")
-    # run(name="wheat-price")
-    run(date="0901", dataset_name="gefcom", lr=0.01, n_iter=0)
-    # test_from_checkpoint(date="0831_4", dataset_name="solar", selector="horseshoe", kernel_order=2, repetition=2)

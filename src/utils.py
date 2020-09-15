@@ -3,7 +3,6 @@ import logging
 import time
 import numpy as np
 import tensorflow as tf
-import tensorflow_datasets as tfds
 import scipy.io as sio
 from sklearn.decomposition import PCA
 from sklearn.model_selection import train_test_split
@@ -125,24 +124,6 @@ class UCIDataset(Dataset):
         self.y_train = to_default_float(y_train)
         self.y_test = to_default_float(y_test)
 
-    # def data(self, test_size=0.1, random_state=1):
-    #     x, y = self.retrieve()
-    #     x_train, x_test, y_train, y_test = train_test_split(x, y,
-    #                                                         test_size=test_size,
-    #                                                         random_state=random_state)
-    #
-    #     x_train, x_test, _, _ = standardize(x_train, x_test)
-    #     y_train, y_test, _, std_y_train = standardize(y_train, y_test)
-    #
-    #     self.n_train = x_train.shape[0]
-    #     self.n_test = x_test.shape[0]
-    #     self.std_y_train = std_y_train
-    #
-    #     self.x_train = to_default_float(x_train)
-    #     self.x_test = to_default_float(x_test)
-    #     self.y_train = to_default_float(y_train)
-    #     self.y_test = to_default_float(y_test)
-
 
 
     def retrieve(self):
@@ -159,8 +140,6 @@ class NavalDataset(UCIDataset):
         x, y = super(NavalDataset, self).retrieve()
         x = np.delete(x, axis=1, obj=[8, 11])
         return x, y
-
-
 
 
 

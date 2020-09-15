@@ -1,15 +1,14 @@
-from src.experiment import *
+import matplotlib
 import matplotlib.pyplot as plt
-from src.kernels import create_linear, create_rbf, create_period
 from gpflow.config import set_default_jitter
 
-# plotting style
-import matplotlib
-matplotlib.rcParams.update({'font.size':12,'figure.subplot.bottom':0.125})
-# from matplotlib import rc
-# rc('font',**{'family':'sans-serif','sans-serif':['Helvetica']})
+from src.experiment import *
+from src.kernels import create_linear, create_rbf, create_period
+
+matplotlib.rcParams.update({'font.size': 12, 'figure.subplot.bottom': 0.125})
 import seaborn as sns
-sns.set_style({"font.family":"serif"})
+
+sns.set_style({"font.family": "serif"})
 
 set_default_jitter(1e-3)
 
@@ -51,7 +50,6 @@ def create_model(inducing_point, data_shape, num_data, n_inducing, kernel_order,
     return model
 
 
-
 def plot_abcd(x_train, y_train, x_test, y_test, x_extra, mu, lower, upper):
     plt.figure(figsize=(3 * golden_ratio, 3))
     plt.plot(x_train, y_train, "k.", label="train")
@@ -70,21 +68,19 @@ def plot_abcd(x_train, y_train, x_test, y_test, x_extra, mu, lower, upper):
 
 
 def plot_decompostion(selector, gps, x_extra, n_components=3):
-
     w = selector.sample()
     w = w.numpy().squeeze()
     print(w)
     sorted_index = np.argsort(w)
     selected_gps = []
     for i in sorted_index[-n_components:]:
-
         selected_gps.append(gps[i])
         mu, var = gps[i].predict_f(x_extra)
-        lower = mu - 1.96*tf.sqrt(var)
+        lower = mu - 1.96 * tf.sqrt(var)
         upper = mu + 1.96 * tf.sqrt(var)
         mu, var = mu.numpy(), var.numpy()
         lower, upper = lower.numpy(), upper.numpy()
-        plt.figure(figsize=(1.5*golden_ratio, 1.5))
+        plt.figure(figsize=(1.5 * golden_ratio, 1.5))
         plt.plot(x_extra, mu)
         plt.fill_between(x_extra.squeeze(), lower.squeeze(), upper.squeeze(), alpha=0.2)
         plt.savefig("../figure/mauna_c_{}.png".format(i), dpi=300, bbox_inches="tight")
@@ -150,6 +146,6 @@ if __name__ == "__main__":
     x_test = dataset.x_test
     y_train = dataset.y_train
     y_test = dataset.y_test
-    plot_decompostion(model.selector, model.gps, x_extra)
+    # plot_decompostion(model.selector, model.gps, x_extra)
     plot_abcd(x_train, y_train, x_test, y_test, x_extra, mu, lower, upper)
     plt.show()

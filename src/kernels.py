@@ -122,33 +122,5 @@ def additive(kernel_gen_fn, data_shape, num_active_dims_per_kernel=1, sd=1.):
 
 
 
-if __name__ == "__main__":
-
-    from src.utils import get_dataset, get_data_shape
-
-    # dataset = get_dataset("airline")
-    dataset = get_dataset("housing")
-    data_shape = get_data_shape(dataset)
-    print(data_shape)
-
-
-    # kernels = [create_linear(data_shape),
-    #            create_rbf(data_shape),
-    #            create_period(data_shape), Product([create_linear(data_shape),
-    #                                                create_rbf(data_shape),
-    #                                                create_period(data_shape)])]
-
-    # kernels = additive(create_linear, data_shape, num_active_dims_per_kernel=1)
-    kernels = additive(create_rbf,data_shape, num_active_dims_per_kernel=1)
-    kernels = additive(create_period, data_shape, num_active_dims_per_kernel=1, sd=1.)
-
-
-    for kernel in kernels:
-        gpflow.utilities.print_summary(kernel)
-
-
-
-
-
 
 
