@@ -1,4 +1,5 @@
 import os
+import sys
 
 from gpflow.likelihoods import Bernoulli
 
@@ -8,13 +9,13 @@ from src.utils import create_logger
 os.environ["CUDA_VISIBLE_DEVICES"] = "-1"
 
 
-def create_kernels(data_shape, addtive_order):
+def create_kernels(data_shape, additive_order):
     kernels = []
     for order in additive_order:
         print("Create additive order: {}".format(order))
         ks = additive(create_rbf, data_shape=data_shape, num_active_dims_per_kernel=order)
         kernels.extend(ks)
-
+    fix_kernel_variance(kernels)
     return kernels
 
 
@@ -66,10 +67,12 @@ def run_additive(date,
                  logger=logging.getLogger("default")
 
                  ):
-    unique_name = create_unique_name(date, dataset_name, None, None, None)
+    unique_name = create_unique_name(date, dataset_name, None, None)
 
     # data
     dataset = load_data(dataset_name)
+    x, y = dataset.retrieve()
+    print(x[1:3,:])
     x_train, y_train = dataset.get_train()
     train_iter = make_data_iteration(x_train, y_train, batch_size=batch_size)
     x_test, y_test = dataset.get_test()
@@ -138,6 +141,7 @@ def run_additive(date,
                                                                                          acc,
                                                                                          ll.numpy()))
 
+    get_weight(model.selector, model.gps)
     # do prediction
     if not classify:
         mu, var = model.predict_y(x_test)
@@ -159,16 +163,52 @@ def run_additive(date,
             ll.numpy()))
 
 
+def get_weight(selector, gps, n_components=3):
+
+    w = selector.sample()
+    w = w.numpy().squeeze()
+    print(w)
+    sorted_index = np.argsort(w)
+    for i in sorted_index[-n_components:]:
+        print(w[i])
+        # print_summary(gps[i].kernel)
+        gp = gps[i]
+        kernel = gp.kernel
+        print("w {}\t active_dims={}".format(w[i], kernel.active_dims))
+
+    import matplotlib.pyplot as plt
+    import matplotlib
+    matplotlib.rcParams.update({'font.size': 12, 'figure.subplot.bottom': 0.125})
+    matplotlib.rcParams.update({
+        "text.usetex": True,
+        # "font.family": "serif",
+        # "font.serif": ["Palatino"],
+    })
+    from matplotlib import rc
+    rc('font', **{'family': 'sans-serif', 'sans-serif': ['Helvetica']})
+    plt.figure(figsize=(5, 1.5))
+    plt.bar(np.arange(len(w)), w**2)
+    plt.xticks([])
+    # plt.xlim(-1, 12)
+    plt.xlabel(r"kernels $k_i$")
+    plt.ylabel(r"$w_i$")
+    plt.show()
+
+
 if __name__ == "__main__":
     # date = sys.argv[1]
     # dataset_name = sys.argv[2]
-    date = "0902"
-    dataset_name = "heart"
     # LOAD OR NOT
-    load = False
 
-    n_iter = 10000
+
+    n_iter = 5000
     lr = 0.01
+
+    date = "0909_1"
+    dataset_name = "liver"
+    # if len(sys.argv) > 3:
+    n_iter = 0
+
 
     if dataset_name == "housing":
         additive_order = [3]
@@ -191,10 +231,8 @@ if __name__ == "__main__":
     else:
         raise ValueError("cannot find data set")
 
-    if load:
-        n_iter = 0
 
-    unique_name = create_unique_name(date, dataset_name, kernel_order=None, repetition=None, selector=None)
+    unique_name = create_unique_name(date, dataset_name, kernel_order=None, repetition=None)
 
     logger = create_logger("../log", unique_name, __file__)
 
