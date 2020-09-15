@@ -88,8 +88,8 @@ if __name__ == "__main__":
     ## LOAD OR TRAIN
     load = True
     ## SELECT BETWEEN no_prior or se
-    # name = "no_prior"
-    name = "se"
+    name = "no_prior"
+    # name = "se"
 
     # All parameters are here
     dataset_name = "gefcom"
@@ -156,6 +156,19 @@ if __name__ == "__main__":
             exit(0)
 
     mu, var = model.predict_y(x_test)
+
+    ll = model.likelihood.predict_log_density(mu, var, y_test)
+    ll = tf.squeeze(tf.reduce_mean(ll))
+    rmse = tf.sqrt(tf.reduce_mean(
+        tf.square(
+            tf.squeeze(mu) - tf.squeeze(y_test)
+        )
+    )
+    )
+    print("RMSE: {} \t Test LL: {}".format(rmse.numpy(), ll.numpy()))
+
+
+
     lower = mu - 1.96 * tf.sqrt(var)
     upper = mu + 1.96 * tf.sqrt(var)
     mu, lower, upper = mu.numpy(), lower.numpy(), upper.numpy()

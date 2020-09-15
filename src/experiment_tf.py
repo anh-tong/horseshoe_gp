@@ -95,9 +95,6 @@ def train_and_test(model,
     @tf.function
     def optimize_step():
         optimizer.minimize(train_loss, model.trainable_variables)
-        # horseshoe update
-        if isinstance(model.selector, HorseshoeSelector):
-            model.selector.update_tau_lambda()
 
     ckpt.restore(manager.latest_checkpoint)
     if manager.latest_checkpoint:
@@ -109,7 +106,7 @@ def train_and_test(model,
         # optimizer step
         optimize_step()
         # horseshoe update
-        if isinstance(model.selector, HorseshoeSelector):
+        if isinstance(model, StructuralSVGP) and isinstance(model.selector, HorseshoeSelector):
             model.selector.update_tau_lambda()
 
         # save checkpoint
@@ -147,7 +144,7 @@ def train(model, train_iter, ckpt_dir, ckpt_freq=1000, n_iter=10000, lr=0.01, da
         # model.elbo(next(train_iter))
         optimize_step()
         # additional update for the horseshoe case
-        if isinstance(model.selector, HorseshoeSelector):
+        if isinstance(model, StructuralSVGP) and isinstance(model.selector, HorseshoeSelector):
             model.selector.update_tau_lambda()
 
         # save check point

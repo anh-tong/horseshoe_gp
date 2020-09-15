@@ -44,7 +44,7 @@ class Linear(Linear_gpflow):
         return super().K_diag(X_shifted)
 
 
-def create_linear(data_shape, sd=1., active_dims=None):
+def create_linear(data_shape, sd=1., active_dims=None, type="weak"):
     diff = data_shape["x_max"] - data_shape["x_min"]
     location = np.random.uniform(low=data_shape["x_min"] + 0.1 * diff,
                                  high=data_shape["x_max"] - 0.1*diff)
@@ -52,7 +52,7 @@ def create_linear(data_shape, sd=1., active_dims=None):
         location = location[active_dims]
     return Linear(location=location, active_dims=active_dims)
 
-def create_rbf(data_shape, sd=1., active_dims=None):
+def create_rbf(data_shape, sd=1., active_dims=None, type="weak"):
 
     # weak prior
     lengthscales = np.random.rand(data_shape["n_dims"]) * 0.1
@@ -63,26 +63,30 @@ def create_rbf(data_shape, sd=1., active_dims=None):
 
     return RBF(lengthscales=lengthscales, active_dims=active_dims)
 
-def create_period(data_shape, sd=1., active_dims=None):
+def create_period(data_shape, sd=1., active_dims=None, type="weak"):
     # base_kernel = create_rbf(data_shape, active_dims=active_dims)
     base_kernel = RBF(active_dims=active_dims)
 
     # weak prior
-    p_min = np.log(10*(data_shape["x_max"] - data_shape["x_min"])/ data_shape["N"])
-    W = truncnorm.rvs(0., np.infty, loc=-0.5, size=data_shape["n_dims"])
-    period = np.exp(p_min + W)
+    if type == "weak":
+        p_min = np.log(10*(data_shape["x_max"] - data_shape["x_min"])/ data_shape["N"])
+        W = truncnorm.rvs(0., np.infty, loc=-0.5, size=data_shape["n_dims"])
+        period = np.exp(p_min + W)
 
     # strong prior
-    p_max = np.log(data_shape["x_max"] - data_shape["x_min"]) - np.log(5.)
-    U = truncnorm.rvs(-np.infty, 0., loc=-0.5 , size=data_shape["n_dims"])
-    period_ = np.exp(p_max + U)
+    elif type == "strong":
+        p_max = np.log(data_shape["x_max"] - data_shape["x_min"]) - np.log(5.)
+        U = truncnorm.rvs(-np.infty, 0., loc=-0.5 , size=data_shape["n_dims"])
+        period = np.exp(p_max + U)
+    else:
+        raise ValueError("Wrong prior [{}] for hyperparameter intialization ".format(type))
 
     if active_dims is not None:
         period = period[active_dims]
 
     return Periodic(base_kernel, period=period)
 
-def create_se_per(data_shape, sd=1., active_dims=None):
+def create_se_per(data_shape, sd=1., active_dims=None, type="weak"):
 
     se = create_rbf(data_shape, sd, active_dims)
     per = create_period(data_shape, sd, active_dims)

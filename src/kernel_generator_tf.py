@@ -11,14 +11,14 @@ class Generator(object):
         self.data_shape = data_shape
         self.base_fn = [create_rbf, create_period, create_linear] if base_fn is None else base_fn
 
-    def create_first_order(self):
+    def create_first_order(self, type="weak"):
         kernels = []
         for generate_fn in self.base_fn:
-            k = generate_fn(self.data_shape)
+            k = generate_fn(self.data_shape, type=type)
             kernels.append(k)
         return kernels
 
-    def create(self, order):
+    def create(self, order, type):
         if order == 1:
             return self.create_first_order()
         else:
@@ -27,7 +27,7 @@ class Generator(object):
             for c in comb:
                 kernel = []
                 for generate_fn in c:
-                    k = generate_fn(self.data_shape)
+                    k = generate_fn(self.data_shape, type=type)
                     kernel.append(k)
                 kernel = reduce_rbf(kernel)
                 if len(kernel) == 1:
@@ -39,10 +39,10 @@ class Generator(object):
 
         return kernels
 
-    def create_upto(self, upto_order):
+    def create_upto(self, upto_order, type="weak"):
         ret = []
         for i in range(upto_order):
-            kernels = self.create(order=i + 1)
+            kernels = self.create(order=i + 1, type=type)
             ret.extend(kernels)
 
         return ret

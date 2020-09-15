@@ -6,29 +6,30 @@ from src.experiment_tf import *
 from src.kernels import *
 from src.utils import get_data_shape_from_XY
 import matplotlib
-matplotlib.rcParams.update({'font.size':14,'figure.subplot.bottom':0.125})
+matplotlib.rcParams.update({'font.size': 12, 'figure.subplot.bottom': 0.125})
 # from matplotlib import rc
 # rc('font',**{'family':'sans-serif','sans-serif':['Helvetica']})
 import seaborn as sns
-sns.set_style( {"font.family":"serif"})
+sns.set_style({"font.family":"serif"})
 # sns.set(font="Times New Roman")
-
+golden_ratio = (1 + 5 ** 0.5) / 2
 
 np.random.seed(123)
 tf.random.set_seed(123)
 
 
 def create_kernel_pool(data_shape):
+    lin = create_linear(data_shape)
     se1 = create_rbf(data_shape)
     per1 = create_period(data_shape)
     se_per1 = create_se_per(data_shape)
-    return [se1, per1, se_per1]
+    return [lin, se1, per1, se_per1]
 
 
-def create_true_kernel_2():
-    per = Periodic(RBF(lengthscales=2.), period=1.5)
+def create_true_kernel():
+    per = Periodic(RBF(variance=3.5, lengthscales=2.), period=0.5)
     se2 = RBF(variance=0.5, lengthscales=1.5)
-    per2 = Periodic(RBF(), period=1.5)
+    per2 = Periodic(RBF(), period=3.)
     se_per2 = Product([se2, per2])
     return Sum([per, se_per2])
 
@@ -42,7 +43,7 @@ def generate_data(kernel, noise=0.0001, n_data=250, lower=-5, upper=5):
     return x, sample
 
 
-kernel = create_true_kernel_2()
+kernel = create_true_kernel()
 
 n_data = 250
 n_train = 200
@@ -63,11 +64,11 @@ X, Y, X_extra, Y_extra = split()
 
 # plt.plot(X, Y)
 # plt.show()
+# exit(0)
 
 data_shape = get_data_shape_from_XY(X, Y)
 
 kernel_pools = create_kernel_pool(data_shape)
-kernel_pools.extend(create_kernel_pool(data_shape))
 kernel_pools.extend(create_kernel_pool(data_shape))
 
 print("Number of kernel is {}".format(len(kernel_pools)))
@@ -99,7 +100,7 @@ def create_structral_gp():
 
 def run_justify(load=False, create_model_fn=create_structral_gp, chkpt_dir="../model/justify_our_model"):
     model = create_model_fn()
-    optimizer = tf.optimizers.Adam(lr=0.01)
+    optimizer = tf.optimizers.Adam(lr=0.05)
     train_loss = model.training_loss_closure((X, Y))
 
     chkpt = tf.train.Checkpoint(model=model)
@@ -158,17 +159,18 @@ def run_justify(load=False, create_model_fn=create_structral_gp, chkpt_dir="../m
     for kernel in kernel_pools:
         print_summary(kernel)
 
-    plt.figure(figsize=(6,3.5))
-    plt.plot(X, Y, ".", color="k")
-    plt.plot(x_test, mu,color="tab:blue")
-    plt.plot(X_extra, Y_extra, "*", color="tab:orange")
-    plt.fill_between(x_test.squeeze(), lower.squeeze(), upper.squeeze(), color="tab:blue", alpha=0.2)
+    plt.figure(figsize=(3*golden_ratio, 3))
+    plt.plot(X, Y, "k.", label="train")
+    plt.plot(X_extra, Y_extra, "*", label="test")
+    plt.plot(x_test, mu, label="predict")
+    plt.fill_between(x_test.squeeze(), lower.squeeze(), upper.squeeze(), alpha=0.2, label="confidence")
 
-    sep = 0.5* (X[-1] + X_extra[0])
-    plt.xticks([-3, 0, 3])
-    plt.yticks([-1, 0, 1, 2, 3])
-    plt.ylim([-1.1, 3])
-    plt.xlim([-5.1,5.1])
+    # sep = 0.5* (X[-1] + X_extra[0])
+    # plt.xticks([-3, 0, 3])
+    # plt.yticks([-1, 0, 1, 2, 3])
+    # plt.ylim([-1.1, 3])
+    # plt.xlim([-5.1,5.1])
+    plt.legend(loc="upper left")
 
     if isinstance(model, StructuralSVGP):
         plt.savefig("../figure/justify_our_model.png", dpi=300, bbox_inches="tight")
@@ -178,11 +180,11 @@ def run_justify(load=False, create_model_fn=create_structral_gp, chkpt_dir="../m
 
 # OUR MODEL
 chkpt_dir = "../model/justify_our_model"
-run_justify(create_model_fn=create_structral_gp, chkpt_dir=chkpt_dir, load=True)
+run_justify(create_model_fn=create_structral_gp, chkpt_dir=chkpt_dir, load= False)
 
 # BASELINE MODEL
 chkpt_dir = "../model/justify_baseline"
-run_justify(create_model_fn=create_sgp_no_regularize,
-            chkpt_dir=chkpt_dir,
-            load=True)
+# run_justify(create_model_fn=create_sgp_no_regularize,
+#             chkpt_dir=chkpt_dir,
+#             load=True)
 plt.show()

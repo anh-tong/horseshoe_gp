@@ -2,6 +2,7 @@ from src.experiment_tf import *
 from src.kernels import create_linear, create_rbf, create_period
 import matplotlib.pyplot as plt
 from gpflow.config import set_default_jitter
+from gpflow.utilities import print_summary
 
 # plotting style
 import matplotlib
@@ -85,7 +86,40 @@ def plot_posterior_on_test(x_test, y_test, x_min, mu, lower, upper):
     plt.savefig("../figure/gefcom_test_ours.png", dgp=300, bbox_inches="tight")
     plt.savefig("../figure/gefcom_test_ours.pdf", dgp=300, bbox_inches="tight")
 
+def plot_decompostion(selector, gps, x_extra, n_components=3):
 
+    w = selector.sample()
+    w = w.numpy().squeeze()
+    print(w)
+    sorted_index = np.argsort(w)
+    selected_gps = []
+    for i in sorted_index[-n_components:]:
+        print(w[i])
+        print_summary(gps[i].kernel)
+        selected_gps.append(gps[i])
+        mu, var = gps[i].predict_f(x_extra)
+        lower = mu - 1.96*tf.sqrt(var)
+        upper = mu + 1.96 * tf.sqrt(var)
+        mu, var = mu.numpy(), var.numpy()
+        lower, upper = lower.numpy(), upper.numpy()
+        plt.figure(figsize=(1.5*golden_ratio, 1.5))
+        plt.plot(x_extra, mu)
+        plt.fill_between(x_extra.squeeze(), lower.squeeze(), upper.squeeze(), alpha=0.2)
+        # plt.xticks([1950, 1955, 1960])
+        plt.savefig("../figure/gefcom_c_{}.png".format(i), dpi=300, bbox_inches="tight")
+        plt.savefig("../figure/gefcom_c_{}.pdf".format(i), dpi=300, bbox_inches="tight")
+
+def plot_weights(selector):
+    w = selector.sample()
+    w = w.numpy().squeeze()
+    plt.figure(figsize=(golden_ratio*2, 1))
+    plt.bar(np.arange(12), np.abs(w))
+    plt.xticks([])
+    plt.xlim(-1, 12)
+    plt.xlabel(r"kernels $k_i$")
+    plt.ylabel(r"$w_i$")
+    plt.savefig("../figure/gefcom_weight.png", dpi=300, bbox_inches="tight")
+    plt.savefig("../figure/gef_weight.pdf", dpi=300, bbox_inches="tight")
 
 
 if __name__ == "__main__":
@@ -135,6 +169,17 @@ if __name__ == "__main__":
     model = train(model, train_iter, ckpt_dir, n_iter=n_iter, lr=lr, dataset=dataset)
 
     mu, var = model.predict_y(x_test)
+
+    ll = model.likelihood.predict_log_density(mu, var, y_test)
+    ll = tf.squeeze(tf.reduce_mean(ll))
+    rmse = tf.sqrt(tf.reduce_mean(
+        tf.square(
+            tf.squeeze(mu) - tf.squeeze(y_test)
+        )
+    )
+    )
+    print("RMSE: {} \t Test LL: {}".format(rmse.numpy(), ll.numpy()))
+
     lower = mu - 1.96 * tf.sqrt(var)
     upper = mu + 1.96 * tf.sqrt(var)
     mu, lower, upper = mu.numpy(), lower.numpy(), upper.numpy()
@@ -147,6 +192,8 @@ if __name__ == "__main__":
     x_min = np.min(x)
     x_max = np.max(x)
     print(2004 + (x_max - x_min) / 365)
-    plot_train_gefcom(x_train, y_train, x_min)
-    plot_posterior_on_test(x_test.numpy(), y_test.numpy(), x_min, mu, lower, upper)
+    plot_weights(model.selector)
+    plot_decompostion(model.selector, model.gps, x_extra=x_test.numpy(), n_components=12)
+    #plot_train_gefcom(x_train, y_train, x_min)
+    #plot_posterior_on_test(x_test.numpy(), y_test.numpy(), x_min, mu, lower, upper)
     plt.show()

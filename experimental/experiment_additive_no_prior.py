@@ -2,8 +2,9 @@ import os
 import sys
 
 from gpflow.likelihoods import Bernoulli
-
+from gpflow.kernels import Sum
 from src.experiment_tf import *
+from src.sparse_selector_tf import LinearSelector
 from src.utils import create_logger
 
 os.environ["CUDA_VISIBLE_DEVICES"] = "-1"
@@ -22,6 +23,7 @@ def create_kernels(data_shape, additive_order):
 def create_model_from_kernel(kernels, inducing_point, num_data):
     print("number of kernels: {}".format(len(kernels)))
 
+
     gps = []
     for kernel in kernels:
         gp = SVGP(kernel, likelihood=None, inducing_variable=inducing_point, q_mu=np.random.random((100, 1)))
@@ -33,6 +35,7 @@ def create_model_from_kernel(kernels, inducing_point, num_data):
     return model
 
 
+
 def create_classification_model(kernels, inducing_point, num_data):
     print("number of kernels: {}".format(len(kernels)))
 
@@ -41,7 +44,7 @@ def create_classification_model(kernels, inducing_point, num_data):
         gp = SVGP(kernel, likelihood=None, inducing_variable=inducing_point, q_mu=np.random.random((100, 1)))
         gps += [gp]
 
-    selector = HorseshoeSelector(dim=len(gps))
+    selector = LinearSelector(dim=len(gps))
     likelihood = Bernoulli()
     model = StructuralSVGP(gps, selector, likelihood, num_data=num_data)
     return model
@@ -71,8 +74,6 @@ def run_additive(date,
 
     # data
     dataset = load_data(dataset_name)
-    x, y = dataset.retrieve()
-    print(x[1:3,:])
     x_train, y_train = dataset.get_train()
     train_iter = make_data_iteration(x_train, y_train, batch_size=batch_size)
     x_test, y_test = dataset.get_test()
@@ -162,7 +163,6 @@ def run_additive(date,
             acc,
             ll.numpy()))
 
-
 def get_weight(selector, gps, n_components=3):
 
     w = selector.sample()
@@ -187,7 +187,7 @@ def get_weight(selector, gps, n_components=3):
     from matplotlib import rc
     rc('font', **{'family': 'sans-serif', 'sans-serif': ['Helvetica']})
     plt.figure(figsize=(5, 1.5))
-    plt.bar(np.arange(len(w)), w**2)
+    plt.bar(np.arange(len(w)), w)
     plt.xticks([])
     # plt.xlim(-1, 12)
     plt.xlabel(r"kernels $k_i$")
@@ -198,17 +198,18 @@ def get_weight(selector, gps, n_components=3):
 if __name__ == "__main__":
     # date = sys.argv[1]
     # dataset_name = sys.argv[2]
-    # LOAD OR NOT
-
-
-    n_iter = 5000
-    lr = 0.01
-
-    date = "0909_1"
-    dataset_name = "liver"
+    #
+    #
+    # n_iter = 5000
+    # lr = 0.1
+    #
     # if len(sys.argv) > 3:
-    n_iter = 0
+    #     n_iter = 0
 
+    date = "additive_no_prior_12"
+    dataset_name = "pima"
+    n_iter = 0
+    lr = 0.1
 
     if dataset_name == "housing":
         additive_order = [3]
