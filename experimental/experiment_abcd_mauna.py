@@ -1,4 +1,4 @@
-from src.experiment_tf import *
+from src.experiment import *
 import matplotlib.pyplot as plt
 from src.kernels import create_linear, create_rbf, create_period
 from gpflow.config import set_default_jitter

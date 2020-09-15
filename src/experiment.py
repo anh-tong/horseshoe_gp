@@ -8,10 +8,10 @@ from gpflow.likelihoods import Gaussian
 from gpflow.models import SVGP
 from gpflow.utilities import to_default_float
 
-from src.kernel_generator_tf import Generator
+from src.kernel_generator import Generator
 from src.kernels import create_rbf, create_period, additive, create_se_per
-from src.sparse_selector_tf import HorseshoeSelector, SpikeAndSlabSelector
-from src.structural_sgp_tf import StructuralSVGP
+from src.sparse_selector import HorseshoeSelector, SpikeAndSlabSelector
+from src.structural_sgp import StructuralSVGP
 from src.utils import get_dataset, get_data_shape
 
 
