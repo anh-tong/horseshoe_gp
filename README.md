@@ -1,10 +1,8 @@
 ## Description
-Code for submission "Learning Compositional Sparse Gaussian Processes with a Shrinkage Prior"
+Code for submission "Learning Compositional Sparse Gaussian Processes with a Shrinkage Prior".
 
 ## Setup
-Run the setup file located in ```bin/setup.sh``` if conda is available
+Run the setup file located in ```bin/setup.sh``` if conda is available.
 
-See ```environment.yml``` for the full description of environment
+See ```environment.yml``` for the full description of environment.
 
-## Experiment
-Example scripts are at ```experiment``` folder
