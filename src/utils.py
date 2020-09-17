@@ -130,12 +130,6 @@ class UCIDataset(Dataset):
         return x, y
 
 
-class NavalDataset(UCIDataset):
-
-    def retrieve(self):
-        x, y = super(NavalDataset, self).retrieve()
-        x = np.delete(x, axis=1, obj=[8, 11])
-        return x, y
 
 
 class GEFCOM(Dataset):
@@ -175,10 +169,6 @@ def get_dataset(name) -> Dataset:
         dataset = UCIDataset("../data/energy.data")
     elif name == "kin8nm":
         dataset = UCIDataset("../data/kin8nm.data")
-    elif name == "naval":
-        dataset = NavalDataset("../data/naval.data")
-    elif name == "power_plant":
-        dataset = UCIDataset("../data/power_plant.data")
     elif name == "wine":
         dataset = UCIDataset("../data/wine.data")
     elif name == "yatch":
