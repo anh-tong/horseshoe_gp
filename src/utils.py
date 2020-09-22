@@ -80,6 +80,8 @@ class ABCDDataset(Dataset):
         self.d = x.shape[1]
         return x, y
 
+
+
 class UCIDataset(Dataset):
 
     def __init__(self, data_dir, name=None):
@@ -151,42 +153,15 @@ class UCIDataset(Dataset):
         self.d = x.shape[1]
         return x, y
 
-class MNISTDataset(Dataset):
+class NavalDataset(UCIDataset):
 
-    def __init__(self, name="MNIST", batch_size=128):
-
-        self.batch_size = batch_size
-        super().__init__(name)
-
-
-    def data(self, test_size=0.1, random_state=123):
-        train, train_info = tfds.load(name="mnist", split=tfds.Split.TRAIN, with_info=True)
-        test, test_info = tfds.load(name="mnist", split=tfds.Split.TEST, with_info=True)
-        self.n_train = train_info.splits["train"].num_examples
-        image_shape = train_info.features["image"].shape
-        self.d = tf.reduce_prod(image_shape)
-
-        self.n_test = test_info.splits["test"].num_examples
-        self.n = self.n_train + self.n_test
+    def retrieve(self):
+        x, y = super(NavalDataset, self).retrieve()
+        x = np.delete(x, axis=1, obj=[8, 11])
+        return x, y
 
 
-        autotune = tf.data.experimental.AUTOTUNE
 
-        def map_fn(input_slice: Dict[str, tf.Tensor]):
-            updated = input_slice
-            image = to_default_float(updated["image"]) / 255.0
-            label = to_default_float(updated["label"])
-            return tf.reshape(image, [-1, self.d]), label
-
-
-        self.train_dataset_norepeat = train.map(map_fn, num_parallel_calls=autotune)
-
-        self.train_dataset = (train.shuffle(1024)
-                              .batch(self.batch_size, drop_remainder=True)
-                              .map(map_fn, num_parallel_calls=autotune)
-                              .prefetch(autotune)
-                              .repeat())
-        self.test_dataset = (test.batch(self.batch_size).map(map_fn, num_parallel_calls=autotune))
 
 
 class GEFCOM(Dataset):
@@ -200,6 +175,7 @@ class GEFCOM(Dataset):
         X = data["times"]
         Y = data["loads"][:,0]
         Y = Y[:,None]
+        Y, _, _ = standardize(Y)
         self.n = X.shape[0]
         self.d = X.shape[1]
         assert len(Y.shape) == 2
@@ -218,8 +194,6 @@ def get_dataset(name) -> Dataset:
         dataset = ABCDDataset("../data/03-mauna2003.mat")
     elif name == "wheat-price":
         dataset = ABCDDataset("../data/beveridge-wheat-price-index-1500.mat")
-    elif name == "mnist":
-        dataset = MNISTDataset()
     elif name == "housing":
         dataset = UCIDataset("../data/housing.data")
     elif name == "concrete":
@@ -229,7 +203,7 @@ def get_dataset(name) -> Dataset:
     elif name == "kin8nm":
         dataset = UCIDataset("../data/kin8nm.data")
     elif name == "naval":
-        dataset = UCIDataset("../data/naval.data")
+        dataset = NavalDataset("../data/naval.data")
     elif name == "power_plant":
         dataset = UCIDataset("../data/power_plant.data")
     elif name == "wine":
@@ -308,30 +282,6 @@ def get_data_shape_from_XY(X, Y):
     data_shape["y_min"] = np.min(Y)
     data_shape["x_max"] = np.max(X, axis=0)
     data_shape["y_max"] = np.max(Y)
-
-    def min_abs_diff_i(x):
-        if len(x) > 1000:
-            # make computation less intensive
-            x = np.random.permutation(x)[:1000]
-        min_value = np.infty
-        for i in x:
-            for j in x:
-                if i != j:
-                    value = abs(i - j)
-                else:
-                    value = np.Inf
-
-                if value < min_value:
-                    min_value = value
-        return min_value
-
-
-    def min_abs_diff(X):
-        value = [min_abs_diff_i(X[:, i]) for i in range(X.shape[1])]
-        value = np.hstack(value)
-        return value
-
-    data_shape["x_min_abs_diff"] = np.log(min_abs_diff(X))
 
     return data_shape
 

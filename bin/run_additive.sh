@@ -2,9 +2,9 @@
 
 date=$1
 
-declare -a StringArray=("concrete" "energy" "kin8nm" "naval" "power_plant" "wine" "yatch")
+declare -a StringArray=("heart" "liver" "pima")
 
 for dataset in "${StringArray[@]}";do
 	echo $dataset
-	python3 ../experimental/experiment_uci.py $date $dataset
+	python3 ../experimental/experiment_additive.py $date $dataset
 done
