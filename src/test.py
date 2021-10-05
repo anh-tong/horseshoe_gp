@@ -1,86 +1,37 @@
-import math
-
 import matplotlib.pyplot as plt
 import numpy as np
-import torch
-from gpytorch.kernels import RBFKernel
-from gpytorch.likelihoods import GaussianLikelihood
-from gpytorch.means import ZeroMean
-from gpytorch.mlls import VariationalELBO, PredictiveLogLikelihood
+import tensorflow as tf
+from gpflow import set_trainable
+from gpflow.kernels import RBF
+from gpflow.likelihoods import Gaussian
+from gpflow.mean_functions import Zero
+from gpflow.models import SVGP
+from gpflow.optimizers import NaturalGradient
 
-from src.structural_sgp import VariationalGP, StructuralSparseGP
+from src.sparse_selector import TrivialSparseSelector, SpikeAndSlabSelector, HorseshoeSelector
+from src.structural_sgp import StructuralSVGP
 
-from src.sparse_selector import TrivialSelector, SpikeAndSlabSelector, HorseshoeSelector
+# tf.executing_eagerly()
 
 # toy data
-train_x = torch.linspace(0, 1, 100)
-train_y = 3. * torch.cos(train_x * 2 * math.pi) + torch.randn(100).mul(train_x.pow(3) * 1.)
+train_x = tf.linspace(0., 1., 100)[:, None]
+train_y = 3. * tf.cos(train_x * 2. * np.pi) + tf.random.normal((100, 1)) * train_x ** 3
 
-# set up kernels
+train_x = tf.cast(train_x, tf.float64)
+train_y = tf.cast(train_y, tf.float64)
+
 n_kernels = 5
-means = [ZeroMean()] * n_kernels
-kernels = [RBFKernel()] * n_kernels
-
-n_inducing = 50
-inducing_points = torch.linspace(0, 1, n_inducing)
-
-# GP for each kernel
 gps = []
-for mean, kernel in zip(means, kernels):
-    gp = VariationalGP(mean, kernel, inducing_points)
-    gps.append(gp)
-
-
-def test_trivial_model():
-    selector = TrivialSelector(n_kernels)
-    # main model
-    model = StructuralSparseGP(gps, selector)
-
-    likelihood = GaussianLikelihood()
-    elbo = VariationalELBO(likelihood, model, num_data=100)
-
-    output = model(train_x)
-    optimizer = torch.optim.Adam(list(model.parameters()) + list(likelihood.parameters()), lr=0.01)
-
-    for i in range(500):
-        optimizer.zero_grad()
-        output = model(train_x)
-        loss = - elbo(output, train_y)
-        loss.backward()
-        optimizer.step()
-        print("Iter: {} \t Loss: {:.2f}".format(i, loss.item()))
-
-    print(torch.mean(output.mean - train_y) ** 2)
-    print(train_y)
-    print(output.mean)
-    plt.plot(train_x, train_y, '+')
-    plt.plot(train_x, output.mean.detach().numpy())
-    lower, upper = output.confidence_region()
-    plt.fill_between(train_x.numpy(), lower.detach().numpy(), upper.detach().numpy(), alpha=0.3)
-    print(lower)
-    print(upper)
-    plt.show()
-
-
-def test_object_spike_and_slab():
-    ss = SpikeAndSlabSelector(5)
-    sample = ss()
-    print(sample)
-    print(
-        ss.kl_divergence())  ## KL divergence equal to 0 makes sense because the variational dist. and prior dist. is the same
-
-
-def test_object_horseshoe():
-    horseshoe = HorseshoeSelector(dim=5, A=1., B=1.)
-    print("entropy", horseshoe.entropy())
-    print("log prior", horseshoe.log_prior())
-    print("kl", horseshoe.kl_divergence())
-    # print("", horseshoe.q_w.kl_divergence())
-    print(horseshoe())
+for i in range(n_kernels):
+    kernel = RBF()
+    set_trainable(kernel.variance, False)
+    mean = Zero()
+    Z = train_x[:50]
+    gp = SVGP(kernel=kernel, mean_function=mean, likelihood=None, inducing_variable=Z)
+    gps += [gp]
 
 
 def create_linear_data():
-
     np.random.seed(123)
     N = 100
     sparsity = 0.05
@@ -101,43 +52,89 @@ def create_linear_data():
     X_train = np.random.randn(N, M + 1)
     X_train[:, M] = 1
     y_train = np.matmul(X_train, beta) + np.random.randn(N)
-    X_train, y_train = torch.tensor(X_train, dtype=torch.float32), torch.tensor(y_train, dtype=torch.float32)
     return M, N, X_train, y_train, beta
 
 
-def test_linear_regression_spike_and_slab():
-    ### CREATE DATA
-    M, N, X_train, y_train, beta = create_linear_data()
+def test_trivial_model():
+    selector = TrivialSparseSelector(n_kernels)
+    test_gp(selector)
+    return
+    likelihood = Gaussian()
+    model = StructuralSVGP(gps, selector, likelihood)
 
+    minibatch_size = 100
+    train_dataset = tf.data.Dataset. \
+        from_tensor_slices((train_x, train_y)). \
+        repeat(). \
+        shuffle(len(train_y))
+    train_iter = iter(train_dataset.batch(minibatch_size))
+    opt = tf.optimizers.Adam()
+
+    train_loss = model.training_loss_closure(train_iter)
+
+    @tf.function
+    def optimize_step():
+        opt.minimize(train_loss, model.trainable_variables)
+
+    for i in range(5000):
+        optimize_step()
+        if i % 10 == 0:
+            print("Iter {}\t Loss{}".format(i, train_loss().numpy()))
+
+    test_x = tf.linspace(-0.1, 1.1, 100)[:, None]
+    test_x = tf.cast(test_x, dtype=tf.float64)
+    mean, var = model.predict_f(test_x)
+
+    plt.plot(train_x, train_y, "kx", mew=2)
+    plt.plot(test_x, mean, "C0", lw=2)
+    plt.fill_between(
+        test_x[:, 0],
+        mean[:, 0] - 1.96 * np.square(var[:, 0]),
+        mean[:, 0] + 1.96 * np.sqrt(var[:, 0]),
+        color='C0',
+        alpha=0.2
+    )
+    plt.show()
+
+
+def test_spike_and_slab():
+    ss = SpikeAndSlabSelector(dim=5)
+    print(ss.entropy())
+    print(ss.log_prior())
+    print(ss.kl_divergence())
+    print(ss.sample())
+
+
+def test_horseshoe():
+    horseshoe = HorseshoeSelector(dim=5)
+    print(horseshoe.entropy())
+    print(horseshoe.log_prior())
+    print(horseshoe.kl_divergence())
+    print(horseshoe.sample())
+
+
+def test_linear_regression_spike_and_slab():
+    M, N, X_train, y_train, beta = create_linear_data()
     spike_and_slab = SpikeAndSlabSelector(dim=M + 1)
 
-    def compute_loss():
+    def loss_closure():
         s2 = spike_and_slab.s2
-        w = spike_and_slab()
-
-        def log_likelihood(w):
-            y_mean = torch.matmul(X_train, w)
-            ll = - 0.5 * N * torch.log(2. * np.pi * s2) - 0.5 * torch.square(y_train - y_mean.squeeze()).sum() / s2
-            return ll
-
-        ll = log_likelihood(w)
+        w = spike_and_slab.sample()
+        y_mean = X_train @ w
+        ll = -0.5 * N * tf.math.log(2. * np.pi * s2) - 0.5 * tf.reduce_sum(tf.square(y_train - tf.squeeze(y_mean))) / s2
         kl = spike_and_slab.kl_divergence()
-        # elbo = log_likelihood(w) - spike_and_slab.kl_divergence()
-        return ll, kl
+        return - (ll - kl)
 
-    optimizer = torch.optim.Adam(spike_and_slab.parameters(), lr=0.005)
+    optimizer = tf.optimizers.Adam()
 
-    for i in range(10000):
-        optimizer.zero_grad()
-        ll, kl = compute_loss()
-        loss = - (ll - kl)
-        loss.backward()
-        optimizer.step()
-        print("Iter: {} \t Loss: {} \t ll: {} \t kl: {} \t noise: {}".format(i,
-                                                                             loss.item(),
-                                                                             ll.item(),
-                                                                             kl.item(),
-                                                                             spike_and_slab.s2.data))
+    @tf.function
+    def optimize_step():
+        optimizer.minimize(loss_closure, list(spike_and_slab.trainable_variables))
+
+    for i in range(20000):
+        optimize_step()
+        if i % 10 == 0:
+            print("Iter: {} \t Loss: {}".format(i, loss_closure().numpy()))
 
     fig = plt.figure(figsize=(16, 8))
 
@@ -147,7 +144,7 @@ def test_linear_regression_spike_and_slab():
     ax.scatter(np.arange(M), beta[:-1], \
                s=70, marker='+', color="black")
     w = spike_and_slab.w_mean * spike_and_slab.prob
-    w = w.detach().numpy()
+    w = w.numpy()
     ax.plot(np.arange(M), w[:-1], \
             linewidth=3, color="red", \
             label="linear model with spike and slab prior")
@@ -161,38 +158,33 @@ def test_linear_regression_spike_and_slab():
     ax.legend(prop={'size': 14})
 
     fig.set_tight_layout(True)
-    fig.savefig('foo.png')
     plt.show()
 
 
 def test_linear_regression_horseshoe():
-
     M, N, X_train, y_train, beta = create_linear_data()
-    horseshoe = HorseshoeSelector(dim=M+1, A=1., B=1.)
+    horseshoe = HorseshoeSelector(dim=M + 1)
 
-    optimizer = torch.optim.Adam(list(horseshoe.parameters()), lr=0.01)
-
-
-    def compute_loss():
-        horseshoe.update_tau_lambda()
+    def loss_closure():
         s2 = horseshoe.s2
-        w = horseshoe()
+        w = horseshoe.sample()
         y_mean = X_train @ w
-        ll = - 0.5 * N * torch.log(2. * np.pi * s2) \
-             - 0.5 * torch.square(y_train - y_mean.squeeze()).sum() / s2
+        ll = -0.5 * N * tf.math.log(2. * np.pi * s2) - 0.5 * tf.reduce_sum(tf.square(y_train - tf.squeeze(y_mean))) / s2
         kl = horseshoe.kl_divergence()
-        return ll, kl
-    for i in range(10000):
-        optimizer.zero_grad()
-        ll, kl = compute_loss()
-        loss = - (ll - kl)
-        loss.backward(retain_graph=True)
-        optimizer.step()
-        print("Iter: {} \t Loss: {} \t ll: {} \t kl: {} \t noise: {}".format(i,
-                                                                             loss.item(),
-                                                                             ll.item(),
-                                                                             kl.item(),
-                                                                             horseshoe.s2.data))
+        return - (ll - kl)
+
+    optimizer = tf.optimizers.Adam(lr=0.01)
+
+    @tf.function
+    def optimize_step():
+        optimizer.minimize(loss_closure, list(horseshoe.trainable_variables))
+
+    for i in range(20000):
+        optimize_step()
+        horseshoe.update_tau_lambda()
+        if i % 10 == 0:
+            print("Iter: {} \t Loss: {}".format(i, loss_closure().numpy()))
+
     fig = plt.figure(figsize=(16, 8))
 
     ax = fig.add_subplot(1, 1, 1)
@@ -200,8 +192,8 @@ def test_linear_regression_horseshoe():
             linewidth=3, color="black", label="ground truth")
     ax.scatter(np.arange(M), beta[:-1], \
                s=70, marker='+', color="black")
-    w = horseshoe()
-    w = w.detach().numpy()
+    w = horseshoe.sample()
+    w = w.numpy()
     ax.plot(np.arange(M), w[:-1], \
             linewidth=3, color="red", \
             label="linear model with spike and slab prior")
@@ -215,75 +207,183 @@ def test_linear_regression_horseshoe():
     ax.legend(prop={'size': 14})
 
     fig.set_tight_layout(True)
-    fig.savefig('foo.png')
+    plt.show()
+
+
+def test_gp_natural_gradient(selector, func=None):
+    likelihood = Gaussian()
+    model = StructuralSVGP(gps, selector, likelihood)
+    from gpflow import set_trainable
+    natgrad_params = []
+    for gp in model.gps:
+        set_trainable(gp.q_mu, False)
+        set_trainable(gp.q_sqrt, False)
+        natgrad_params.append((gp.q_mu, gp.q_sqrt))
+
+    adam_opt = tf.optimizers.Adam(lr=0.01)
+    natgrad_opt = NaturalGradient(gamma=0.1)
+
+    minibatch_size = 100
+    train_dataset = tf.data.Dataset. \
+        from_tensor_slices((train_x, train_y)). \
+        repeat(). \
+        shuffle(len(train_y))
+    train_iter = iter(train_dataset.batch(minibatch_size))
+
+    train_loss = model.training_loss_closure(train_iter)
+
+    @tf.function
+    def adam_step():
+        adam_opt.minimize(train_loss, model.trainable_variables)
+
+    @tf.function
+    def natgrad_step():
+        natgrad_opt.minimize(train_loss, var_list=natgrad_params)
+
+    for i in range(10000):
+        adam_step()
+        natgrad_step()
+        if func is not None:
+            func()
+        if i % 10 == 0:
+            print("Iter {}\t Loss {:.3f}".format(i, tf.squeeze(train_loss()).numpy()))
+
+    test_x = tf.linspace(-0.1, 1.1, 100)[:, None]
+    test_x = tf.cast(test_x, dtype=tf.float64)
+    mean, var = model.predict_f(test_x)
+
+    plt.plot(train_x, train_y, "kx", mew=2)
+    plt.plot(test_x, mean, "C0", lw=2)
+    plt.fill_between(
+        test_x[:, 0],
+        mean[:, 0] - 1.96 * np.square(var[:, 0]),
+        mean[:, 0] + 1.96 * np.sqrt(var[:, 0]),
+        color='C0',
+        alpha=0.2
+    )
+    plt.show()
+
+
+def test_gp(selector, func=None):
+    likelihood = Gaussian()
+    model = StructuralSVGP(gps, selector, likelihood, num_data=100)
+
+    minibatch_size = 100
+    train_dataset = tf.data.Dataset. \
+        from_tensor_slices((train_x, train_y)). \
+        repeat(). \
+        shuffle(len(train_y))
+    train_iter = iter(train_dataset.batch(minibatch_size))
+    opt = tf.optimizers.Adam(lr=0.01)
+
+    train_loss = model.training_loss_closure(train_iter)
+
+    @tf.function
+    def optimize_step():
+        opt.minimize(train_loss, model.trainable_variables)
+
+    for i in range(20000):
+        optimize_step()
+        if func is not None:
+            func()
+        if i % 100 == 0:
+            print("Iter {}\t Loss {:.3f}".format(i, tf.squeeze(train_loss()).numpy()))
+
+    test_x = tf.linspace(-0.1, 1.1, 100)[:, None]
+    test_x = tf.cast(test_x, dtype=tf.float64)
+    mean, var = model.predict_f(test_x)
+
+    plt.plot(train_x, train_y, "kx", mew=2)
+    plt.plot(test_x, mean, "C0", lw=2)
+    plt.fill_between(
+        test_x[:, 0],
+        mean[:, 0] - 1.96 * np.square(var[:, 0]),
+        mean[:, 0] + 1.96 * np.sqrt(var[:, 0]),
+        color='C0',
+        alpha=0.2
+    )
+    plt.show()
+
+
+def test_gp_double_opt(selector, func=None):
+    likelihood = Gaussian()
+    model = StructuralSVGP(gps, selector, likelihood, num_data=100)
+
+    minibatch_size = 100
+    train_dataset = tf.data.Dataset. \
+        from_tensor_slices((train_x, train_y)). \
+        repeat(). \
+        shuffle(len(train_y))
+    train_iter = iter(train_dataset.batch(minibatch_size))
+    opt_gp = tf.optimizers.Adam(lr=0.1)
+    opt_selector = tf.optimizers.Adam(lr=0.01)
+
+    selector_variables = selector.trainable_variables
+    gp_variable = []
+    for gp in model.gps:
+        gp_variable.append(gp.trainable_variables)
+    gp_variable.append(likelihood.trainable_variables)
+
+    train_loss = model.training_loss_closure(train_iter)
+
+    @tf.function
+    def optimize_step():
+        opt_gp.minimize(train_loss, gp_variable)
+        opt_selector.minimize(train_loss, selector_variables)
+
+    for i in range(10000):
+        optimize_step()
+        if func is not None:
+            func()
+        if i % 10 == 0:
+            print("Iter {}\t Loss {:.3f}".format(i, tf.squeeze(train_loss()).numpy()))
+
+    test_x = tf.linspace(-0.1, 1.1, 100)[:, None]
+    test_x = tf.cast(test_x, dtype=tf.float64)
+    mean, var = model.predict_f(test_x)
+
+    plt.plot(train_x, train_y, "kx", mew=2)
+    plt.plot(test_x, mean, "C0", lw=2)
+    plt.fill_between(
+        test_x[:, 0],
+        mean[:, 0] - 1.96 * np.square(var[:, 0]),
+        mean[:, 0] + 1.96 * np.sqrt(var[:, 0]),
+        color='C0',
+        alpha=0.2
+    )
     plt.show()
 
 
 def test_gp_spike_and_slab():
+    selector = SpikeAndSlabSelector(n_kernels, gumbel_temp=0.5)
+    test_gp(selector)
 
-    selector = SpikeAndSlabSelector(dim=n_kernels, gumbel_temp=.5)
-
-    likelihood = GaussianLikelihood()
-    model = StructuralSparseGP(gps, selector, likelihood=likelihood)
-
-    elbo = PredictiveLogLikelihood(model.likelihood, model, num_data=100)
-
-    optimizer = torch.optim.Adam(list(model.parameters()), lr=0.01)
-
-    for i in range(2000):
-        optimizer.zero_grad()
-        output = model(train_x)
-        loss = - elbo(output, train_y)
-        loss.backward()
-        optimizer.step()
-        print("Iter: {} \t Loss: {:.2f}".format(i, loss.item()))
-
-    print(torch.mean(output.mean - train_y) ** 2)
-    print(train_y)
-    print(output.mean)
-    plt.plot(train_x, train_y, '+')
-    plt.plot(train_x, output.mean.detach().numpy())
-    lower, upper = output.confidence_region()
-    plt.fill_between(train_x.numpy(), lower.detach().numpy(), upper.detach().numpy(), alpha=0.3)
-    plt.show()
 
 def test_gp_horseshoe():
+    selector = HorseshoeSelector(n_kernels)
 
-    selector = HorseshoeSelector(dim=n_kernels, A=1., B=1.)
-    model = StructuralSparseGP(gps, selector, likelihood=None)
-
-    likelihood = GaussianLikelihood()
-    elbo = PredictiveLogLikelihood(likelihood, model, num_data=100)
-
-    output = model(train_x)
-    optimizer = torch.optim.Adam(list(model.parameters()) + list(likelihood.parameters()), lr=0.01)
-
-    for i in range(5000):
-        optimizer.zero_grad()
+    def func():
         selector.update_tau_lambda()
-        output = model(train_x)
-        loss = - elbo(output, train_y)
-        loss.backward(retain_graph=True)
-        optimizer.step()
-        print("Iter: {} \t Loss: {:.2f}".format(i, loss.item()))
 
-    print(torch.mean(output.mean - train_y) ** 2)
-    print(train_y)
-    print(output.mean)
-    plt.plot(train_x, train_y, '+')
-    plt.plot(train_x, output.mean.detach().numpy())
-    lower, upper = output.confidence_region()
-    plt.fill_between(train_x.numpy(), lower.detach().numpy(), upper.detach().numpy(), alpha=0.3)
-    plt.show()
+    test_gp(selector, func)
 
 
 # test_trivial_model()
-# test_object_spike_and_slab()
+# test_spike_and_slab()
+# test_horseshoe()
 # test_linear_regression_spike_and_slab()
-
-test_gp_spike_and_slab()
-
-
-# test_object_horseshoe()
 # test_linear_regression_horseshoe()
-# test_gp_horseshoe()
+# test_gp_spike_and_slab()
+test_gp_horseshoe()
+
+## Natural gradient -> not work
+# selector = HorseshoeSelector(n_kernels)
+# def func():
+#     selector.update_tau_lambda()
+# test_gp_natural_gradient(selector, func)
+
+# selector = SpikeAndSlabSelector(n_kernels)
+# test_gp_double_opt(selector)
+
+# selector = LinearSelector(n_kernels)
+# test_gp(selector)

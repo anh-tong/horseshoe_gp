@@ -1,11 +1,7 @@
 /.idea/
 /src/__pycache__
 
-/experimental/.ipynb_checkpoints
-/experimental/__pycache__
-/experimental_jh/.ipynb_checkpoints
-/experimental_jh/__pycache__
-/experimental_jh/bayesian_optimization/deprecated
-/pull_repo
+/experiment/.ipynb_checkpoints
+/experiment/__pycache__
 /src/.ipynb_checkpoints
 /src/__pycache__

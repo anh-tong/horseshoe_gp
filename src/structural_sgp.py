@@ -1,76 +1,82 @@
 from typing import List
 
-import torch
-from gpytorch.distributions import MultivariateNormal
-from gpytorch.lazy import SumLazyTensor
-from gpytorch.models import ApproximateGP
-from gpytorch.variational import CholeskyVariationalDistribution, VariationalStrategy
-from torch.nn import ModuleList
+import tensorflow as tf
+from gpflow.models import SVGP, BayesianModel
+from gpflow.models.model import MeanAndVariance, RegressionData, InputData
+from gpflow.models.training_mixins import ExternalDataTrainingLossMixin
 
 from src.sparse_selector import BaseSparseSelector
 
 
-class VariationalGP(ApproximateGP):
+class StructuralSVGP(BayesianModel, ExternalDataTrainingLossMixin):
 
-    def __init__(self, mean, kernel, inducing_points):
-        variational_dist = CholeskyVariationalDistribution(inducing_points.size(0))
-        variational_strat = VariationalStrategy(self, inducing_points, variational_dist, learn_inducing_locations=True)
-        super().__init__(variational_strat)
-        self.mean_module = mean
-        self.covar_model = kernel
+    def __init__(self, gps: List[SVGP], selector: BaseSparseSelector, likelihood, num_data=None):
 
-    def forward(self, x):
-        mean_x = self.mean_module(x)
-        covar_x = self.covar_model(x)
-        return MultivariateNormal(mean_x, covar_x)
-
-
-class StructuralSparseGP(ApproximateGP):
-
-    def __init__(self, gps: List[ApproximateGP], selector: BaseSparseSelector, likelihood):
-        super().__init__(None)
-        # sanity check #kernels = #dimension
-        assert len(gps) == selector.dim
+        super(StructuralSVGP, self).__init__(name="structrural_gp")
+        self.gps = gps
         self.selector = selector
-        self.gps = ModuleList(gps)
-        self.variational_strategy = StructuralVariationalStrategy(self)
         self.likelihood = likelihood
+        self.num_data = num_data
 
-    def forward(self, x):
-        pass
+    def maximum_log_likelihood_objective(self, data: RegressionData) -> tf.Tensor:
+        return self.elbo(data)
 
-    def __call__(self, inputs, prior=False, **kwargs):
-        posteriors = []
-        for gp in self.gps:
-            posterior = gp(inputs, prior, **kwargs)
-            posteriors += [posterior]
+    def prior_kl(self):
+        kls = [gp.prior_kl() for gp in self.gps]
+        kls.append(tf.squeeze(self.selector.kl_divergence()))
+        return sum(kls)
 
-        weights = self.selector().squeeze()
-        means, covars = [], []
-        for i in range(self.selector.dim):
-            w_i = weights[i].squeeze()
-            mean_i = posteriors[i].mean * w_i
-            covar_i = posteriors[i].covariance_matrix * torch.square(w_i)
-            means.append(mean_i)
-            covars.append(covar_i)
+    def elbo(self, data: RegressionData):
+        X, Y = data
+        f_mean, f_var = self.predict_f(X, full_cov=False, full_output_cov=False)
+        var_exp = self.likelihood.variational_expectations(f_mean, f_var, Y)
+        kl = self.prior_kl()
+        if self.num_data is not None:
+            num_data = tf.cast(self.num_data, dtype=kl.dtype)
+            minibatch_size = tf.cast(tf.shape(X)[0], dtype=kl.dtype)
+            scale = num_data / minibatch_size
+        else:
+            scale = tf.cast(1., dtype=kl.dtype)
 
-        mean = sum(means)
-        covar = SumLazyTensor(*covars)
-        return MultivariateNormal(mean, covar)
+        return tf.reduce_sum(var_exp) * scale - kl
+
+    def predict_f(self, Xnew: InputData, full_cov=False, full_output_cov=False) -> MeanAndVariance:
+
+        w = self.selector.sample()
+        w = tf.squeeze(w)
+        means = []
+        vars = []
+        for i, gp in enumerate(self.gps):
+            w_i = w[i]
+            mean, var = gp.predict_f(Xnew, full_cov, full_output_cov)
+            means += [mean * w_i]
+            w2_i = w_i ** 2
+            vars += [var * w2_i]
+
+        f_mean = tf.add_n(means)
+        f_var = tf.add_n(vars)
+        return f_mean, f_var
+
+    def predict_f_s(self, X_new, full_cov=False, full_output_cov=False):
+
+        s = 5
+        means = []
+        vars = []
+        for _ in range(s):
+            mean, var = self.predict_f_s(X_new, full_cov, full_output_cov)
+            means.append(mean)
+            vars.append(var)
+
+        f_mean = 0.2 * tf.add_n(means)
+        f_var = 0.2 * tf.add_n(vars)
+        return f_mean, f_var
+
+    def predict_y(self, Xnew, full_cov=False, full_output_cov=False):
+        f_mean, f_var = self.predict_f(Xnew, full_cov, full_output_cov)
+        return self.likelihood.predict_mean_and_var(f_mean, f_var)
 
 
-class StructuralVariationalStrategy(object):
-
-    def __init__(self, model: StructuralSparseGP):
-        self.model = model
-
-    def kl_divergence(self):
-        kls = []
-        for i, gp in enumerate(self.model.gps):
-            variational_strategy = gp.variational_strategy
-            kl = variational_strategy.kl_divergence()
-            kls.append(kl)
-
-        gp_kl = sum(kls)
-        horseshoe_kl = self.model.selector.kl_divergence()
-        return gp_kl + horseshoe_kl
+def truncate_small(x, eps=1e-2):
+    pos = 0.5 * (1. + tf.sign(x - eps)) * x
+    neg = 0.5 * (1 + tf.sign(-x - eps)) * x
+    return pos - neg
